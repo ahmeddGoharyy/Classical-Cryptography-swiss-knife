@@ -32,26 +32,34 @@ def idx(c: str) -> int:
     return ord(c.upper()) - 65
 
 
-def restore_format(original: str, letters: str, keep_format: bool, as_ciphertext: bool) -> str:
+def restore_format(original: str, letters: str, keep_format: bool, as_ciphertext: bool,
+                   keep_case: bool = True) -> str:
     """Put cipher output back into the original text's layout.
 
     Without keep_format the default style is used: ciphertext UPPERCASE,
     plaintext lowercase, letters only. With keep_format, spaces/punctuation
-    and the original letter case are preserved (substitution ciphers only).
+    stay at their original positions. keep_case also copies the original
+    letter case; ciphers that move letters (transposition, block ciphers) pass
+    False and use the default case instead. Extra output letters (padding) go
+    after the last letter; when the output is shorter, the leftover spaces
+    and punctuation are still kept.
     """
+    default = str.upper if as_ciphertext else str.lower
     if not keep_format:
-        return letters.upper() if as_ciphertext else letters.lower()
+        return default(letters)
     out, it = [], iter(letters)
+    last = 0  # index in out just after the last letter written
     for c in original:
         if is_letter(c):
             n = next(it, None)
             if n is None:
-                break
-            out.append(n.lower() if c.islower() else n.upper())
+                continue
+            out.append((n.lower() if c.islower() else n.upper()) if keep_case else default(n))
+            last = len(out)
         else:
             out.append(c)
-    out.extend(it)  # any extra letters (shouldn't happen for substitution ciphers)
-    return "".join(out)
+    extra = default("".join(it))
+    return "".join(out[:last]) + extra + "".join(out[last:])
 
 
 def require_letters(key: str, what: str = "Key") -> str:

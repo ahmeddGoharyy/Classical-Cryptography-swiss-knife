@@ -1,8 +1,10 @@
+<p align="center"><img src="cryptoknife/data/logo.svg" width="140" alt="logo"></p>
+
 # Classical Cryptography Swiss Knife
 
 A desktop app (Python + PySide6) to **visualize, solve and crack classical ciphers** step by step.
 
-Made by **Ahmed El Gohary**.
+Vibe coded by **Ahmed El Gohary**.
 
 - **Ciphers:** Caesar, Monoalphabetic, Vigenère (repeating key / autokey), One-time pad, Playfair, Hill, Columnar transposition, Rail fence
 - **Step-by-step animated visualizer** for any plaintext/ciphertext and key (Encrypt / Decrypt buttons, play/pause/step/speed, can be turned off)

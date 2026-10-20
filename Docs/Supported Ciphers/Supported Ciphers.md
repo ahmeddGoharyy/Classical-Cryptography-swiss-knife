@@ -9,7 +9,7 @@ This document lists every algorithm built into **Classical Cryptography Swiss Kn
 | Letter numbering | A = 0, B = 1, …, Z = 25 |
 | Arithmetic | mod 26 |
 | Default output | Ciphertext in UPPERCASE, plaintext in lowercase, letters only (lecture style) |
-| Keep format option | Substitution ciphers (Caesar, Monoalphabetic, Vigenère family) can keep spaces, punctuation and letter case. Ciphers that move letters or change the length (Playfair, Hill, transpositions) always work on letters only. |
+| Keep format option | On by default. Spaces and punctuation stay at their original positions for every cipher. Substitution ciphers (Caesar, Monoalphabetic, Vigenère family) also keep each letter's case; ciphers that move letters or add padding (Playfair, Hill, transpositions) use UPPERCASE ciphertext / lowercase plaintext and put padding letters after the last letter. |
 | "English likeness" | A 0–100 % score built from English quadgram (4-letter) statistics. The crackers use it to rank candidates. |
 
 ## Overview

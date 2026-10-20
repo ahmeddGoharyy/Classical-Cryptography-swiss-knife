@@ -1,4 +1,4 @@
-"""Left navigation: brand, search, collapsible colour-coded groups with monogram items, theme toggle."""
+"""Left navigation: brand, search, collapsible colour-coded categories with icon items, theme toggle."""
 from __future__ import annotations
 
 import re
@@ -8,26 +8,36 @@ from PySide6.QtWidgets import (QButtonGroup, QFrame, QHBoxLayout, QLabel, QLineE
                                QSizePolicy, QVBoxLayout, QWidget)
 
 from ..core.cipher import all_ciphers
+from .logo import logo_pixmap
+from .nav_icons import ICONS, icon_pixmap
 from .theme import theme
 
 AUTHOR = "Ahmed El Gohary"
 
-# family -> (group title, icon glyph, colour, one-line description)
-GROUPS = {
-    "Monoalphabetic substitution": ("Substitution", "Aa", "#4f8cff", "One fixed alphabet"),
-    "Polyalphabetic substitution": ("Polyalphabetic", "∿", "#a78bfa", "Key picks the alphabet"),
-    "Polygraphic substitution": ("Polygraphic", "▦", "#f5b84b", "Letters in blocks"),
-    "Transposition": ("Transposition", "⇄", "#2dd4bf", "Letters rearranged"),
+# Menu categories: (title, icon glyph, colour, one-line description)
+CLASSICAL = ("Classical ciphers", "classical", "#4f8cff", "Pen-and-paper ciphers")
+MODERN = [("Modern symmetric", "symmetric", "#2dd4bf", "One shared secret key"),
+          ("Modern asymmetric", "asymmetric", "#a78bfa", "Public / private key pair")]
+TOOLS = ("Tools", "tools", "#22c55e", "Text statistics")
+# cipher family -> badge colour of its items (keeps related ciphers visually close without sub-groups)
+FAMILY_COLORS = {
+    "Monoalphabetic substitution": "#4f8cff",
+    "Polyalphabetic substitution": "#a78bfa",
+    "Polygraphic substitution": "#f5b84b",
+    "Transposition": "#2dd4bf",
 }
-TOOLS = ("Tools", "∑", "#22c55e", "Text statistics")
 # id -> (title, subtitle) shown in the menu
 DISPLAY = {"caesar": ("Caesar", "shift cipher"), "monoalphabetic": ("Monoalphabetic", "substitution table"),
            "vigenere": ("Vigenère", "repeating key"), "autokey": ("Autokey", "Vigenère variant"),
            "otp": ("One-time pad", "perfect secrecy"), "playfair": ("Playfair", "5×5 key square"),
            "hill": ("Hill", "matrix cipher"), "columnar": ("Columnar", "transposition table"),
            "railfence": ("Rail fence", "zigzag"), "freq": ("Frequency analysis", "letter statistics")}
-MONOGRAMS = {"caesar": "Cs", "monoalphabetic": "Mo", "vigenere": "Vg", "autokey": "Ak", "otp": "Ot",
-             "playfair": "Pf", "hill": "Hl", "columnar": "Co", "railfence": "Rf", "freq": "Fq"}
+
+
+def rgba(hex_color: str, alpha: float) -> str:
+    """'#4f8cff', 0.16 -> 'rgba(79, 140, 255, 0.16)' (Qt reads 8-digit hex as #AARRGGBB, so avoid it)."""
+    h = hex_color.lstrip("#")
+    return f"rgba({int(h[0:2], 16)}, {int(h[2:4], 16)}, {int(h[4:6], 16)}, {alpha})"
 
 
 def split_name(name: str) -> tuple[str, str]:
@@ -37,7 +47,7 @@ def split_name(name: str) -> tuple[str, str]:
 
 
 class NavItem(QPushButton):
-    def __init__(self, key: str, title: str, subtitle: str, mono: str, color: str):
+    def __init__(self, key: str, title: str, subtitle: str, icon: str, color: str):
         super().__init__()
         self.key = key
         self.search_text = f"{title} {subtitle}".lower()
@@ -48,11 +58,11 @@ class NavItem(QPushButton):
         lay = QHBoxLayout(self)
         lay.setContentsMargins(10, 5, 10, 5)
         lay.setSpacing(10)
-        badge = QLabel(mono)
+        badge = QLabel()
+        badge.setPixmap(icon_pixmap(icon, color, 18))
         badge.setAlignment(Qt.AlignCenter)
-        badge.setFixedSize(28, 28)
-        badge.setStyleSheet(f"background: {color}33; color: {color}; border-radius: 8px; font-weight: 800;"
-                            "font-size: 9pt;")
+        badge.setFixedSize(30, 30)
+        badge.setStyleSheet(f"background: {rgba(color, 0.16)}; border-radius: 8px;")
         badge.setAttribute(Qt.WA_TransparentForMouseEvents)
         lay.addWidget(badge)
         texts = QVBoxLayout()
@@ -85,16 +95,18 @@ class Group(QWidget):
         h = QHBoxLayout(self.header)
         h.setContentsMargins(8, 6, 10, 6)
         h.setSpacing(10)
-        tile = QLabel(icon)
+        tile = QLabel()
+        tile.setPixmap(icon_pixmap(icon, "#ffffff", 18))
         tile.setAlignment(Qt.AlignCenter)
         tile.setFixedSize(30, 30)
-        tile.setStyleSheet(f"background: {color}; color: white; border-radius: 9px; font-weight: 800; font-size: 11pt;")
+        tile.setStyleSheet(f"background: {color}; border-radius: 9px;")
         tile.setAttribute(Qt.WA_TransparentForMouseEvents)
         h.addWidget(tile)
         texts = QVBoxLayout()
         texts.setSpacing(0)
         t = QLabel(title)
         t.setObjectName("groupTitle")
+        t.setWordWrap(True)
         t.setAttribute(Qt.WA_TransparentForMouseEvents)
         d = QLabel(desc)
         d.setObjectName("navSub")
@@ -106,6 +118,7 @@ class Group(QWidget):
         self.count.setObjectName("countPill")
         self.count.setAlignment(Qt.AlignCenter)
         self.count.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.count.setVisible(bool(items))  # empty categories: no "0" pill, more room for the title
         h.addWidget(self.count)
         self.chev = QLabel()
         self.chev.setAttribute(Qt.WA_TransparentForMouseEvents)
@@ -118,6 +131,11 @@ class Group(QWidget):
         bl.setSpacing(2)
         for it in items:
             bl.addWidget(it)
+        if not items:
+            soon = QLabel("Coming soon")
+            soon.setObjectName("navSub")
+            soon.setContentsMargins(12, 4, 0, 4)
+            bl.addWidget(soon)
         lay.addWidget(self.body)
         self.header.toggled.connect(self._toggle)
         self._toggle(self.header.isChecked())
@@ -133,7 +151,7 @@ class Group(QWidget):
             ok = all(w in it.search_text for w in words)
             it.setVisible(ok)
             visible += ok
-        self.setVisible(visible > 0)
+        self.setVisible(visible > 0 or not words)
         if words:
             self.body.setVisible(True)
             self.chev.setText("▾")
@@ -158,10 +176,9 @@ class Sidebar(QFrame):
 
         brand = QHBoxLayout()
         brand.setSpacing(10)
-        logo = QLabel("🔐")
-        logo.setAlignment(Qt.AlignCenter)
+        logo = QLabel()
+        logo.setPixmap(logo_pixmap(40, tile=True))
         logo.setFixedSize(40, 40)
-        logo.setObjectName("brandTile")
         brand.addWidget(logo)
         names = QVBoxLayout()
         names.setSpacing(0)
@@ -187,24 +204,22 @@ class Sidebar(QFrame):
         self.nav_lay = QVBoxLayout(nav)
         self.nav_lay.setContentsMargins(0, 0, 4, 0)
         self.nav_lay.setSpacing(6)
-        self.home = self._item("home", "Home", "about the app", "⌂", "#9aa0a8")
+        self.home = self._item("home", "Home", "about the app", "home", "#9aa0a8")
         self.nav_lay.addWidget(self.home)
         self.groups: list[Group] = []
-        families: dict[str, list] = {}
+        title, icon, color, desc = CLASSICAL
+        items = []
         for c in all_ciphers():
-            families.setdefault(c.family, []).append(c)
-        for fam, ciphers in families.items():
-            title, icon, color, desc = GROUPS.get(fam, (fam, "•", "#9aa0a8", ""))
-            items = []
-            for c in ciphers:
-                t, sub = DISPLAY.get(c.id) or split_name(c.name)
-                items.append(self._item(f"cipher:{c.id}", t, sub, MONOGRAMS.get(c.id, c.name[:2]), color, c.summary))
-            g = Group(title, icon, color, desc, items)
+            t, sub = DISPLAY.get(c.id) or split_name(c.name)
+            badge = FAMILY_COLORS.get(c.family, color)
+            items.append(self._item(f"cipher:{c.id}", t, sub, c.id if c.id in ICONS else "classical", badge, c.summary))
+        for title, icon, color, desc in [CLASSICAL, *MODERN]:
+            g = Group(title, icon, color, desc, items if title == CLASSICAL[0] else [])
             self.groups.append(g)
             self.nav_lay.addWidget(g)
         t_title, t_icon, t_color, t_desc = TOOLS
         tool = Group(t_title, t_icon, t_color, t_desc,
-                     [self._item("freq", *DISPLAY["freq"], MONOGRAMS["freq"], t_color,
+                     [self._item("freq", *DISPLAY["freq"], "freq", t_color,
                                  "Letter statistics of any text")])
         self.groups.append(tool)
         self.nav_lay.addWidget(tool)
@@ -227,13 +242,13 @@ class Sidebar(QFrame):
         theme().changed.connect(self._theme_text)
         self._theme_text()
         lay.addWidget(self.theme_btn)
-        credit = QLabel(f"Made by <b>{AUTHOR}</b>")
+        credit = QLabel(f"Vibe coded by <b>{AUTHOR}</b>")
         credit.setObjectName("brandSub")
         credit.setAlignment(Qt.AlignCenter)
         lay.addWidget(credit)
 
-    def _item(self, key, title, sub, mono, color, tip="") -> NavItem:
-        it = NavItem(key, title, sub, mono, color)
+    def _item(self, key, title, sub, icon, color, tip="") -> NavItem:
+        it = NavItem(key, title, sub, icon, color)
         if tip:
             it.setToolTip(tip)
         it.clicked.connect(lambda: self.selected.emit(key))

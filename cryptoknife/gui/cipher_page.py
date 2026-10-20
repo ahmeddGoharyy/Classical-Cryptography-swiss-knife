@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import html
+import traceback
 
-from PySide6.QtCore import QObject, QRectF, QSettings, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import QEvent, QObject, QRectF, QSettings, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (QAbstractItemView, QBoxLayout, QCheckBox, QComboBox, QGridLayout, QHBoxLayout, QHeaderView,
                                QLabel, QLineEdit, QProgressBar, QPushButton, QScrollArea, QSlider, QSplitter,
@@ -14,6 +15,7 @@ from ..core.cipher import Cipher, CrackContext, CrackResult
 from ..core.text import ALPHABET, CipherError, clean
 from ..core.trace import Chart, Trace
 from .scene_view import SceneView
+from .sidebar import split_name
 from .loading import LoadingOverlay
 from .step_player import StepPlayer
 from .theme import theme
@@ -63,6 +65,59 @@ def visualization_help() -> str:
     )
 
 
+class PanZoom(QObject):
+    """Drag the diagram to pan it; Ctrl + mouse wheel zooms it (plain wheel scrolls as usual)."""
+
+    def __init__(self, scroll: QScrollArea, scene: QWidget, zoom: QSlider, on_manual_zoom):
+        super().__init__(scene)
+        self.scroll, self.scene, self.zoom, self.on_manual_zoom = scroll, scene, zoom, on_manual_zoom
+        self._last = None
+        scene.setCursor(Qt.OpenHandCursor)
+        scene.installEventFilter(self)
+
+    def eventFilter(self, obj, ev):
+        t = ev.type()
+        if t == QEvent.MouseButtonPress and ev.button() in (Qt.LeftButton, Qt.MiddleButton):
+            self._last = ev.globalPosition().toPoint()
+            self.scene.setCursor(Qt.ClosedHandCursor)
+            return True
+        if t == QEvent.MouseMove and self._last is not None:
+            pos = ev.globalPosition().toPoint()
+            d = pos - self._last
+            self._last = pos
+            h, v = self.scroll.horizontalScrollBar(), self.scroll.verticalScrollBar()
+            h.setValue(h.value() - d.x())
+            v.setValue(v.value() - d.y())
+            return True
+        if t == QEvent.MouseButtonRelease and self._last is not None:
+            self._last = None
+            self.scene.setCursor(Qt.OpenHandCursor)
+            return True
+        if t == QEvent.Wheel and ev.modifiers() & Qt.ControlModifier:
+            step = 8 if ev.angleDelta().y() > 0 else -8
+            self.on_manual_zoom()
+            self.zoom.setValue(self.zoom.value() + step)
+            return True
+        return False
+
+
+class VizWindow(QWidget):
+    """Separate, freely resizable window that hosts the visualization card while it is popped out."""
+    closed = Signal()
+
+    def __init__(self, parent: QWidget, title: str):
+        super().__init__(parent, Qt.Window)
+        self.setObjectName("content")
+        self.setAttribute(Qt.WA_StyledBackground)
+        self.setWindowTitle(title)
+        self.body = QVBoxLayout(self)
+        self.body.setContentsMargins(16, 16, 16, 16)
+
+    def closeEvent(self, ev) -> None:
+        self.closed.emit()
+        super().closeEvent(ev)
+
+
 class CipherPage(QWidget):
     def __init__(self, cipher: Cipher, parent=None):
         super().__init__(parent)
@@ -76,8 +131,9 @@ class CipherPage(QWidget):
         titles.setSpacing(2)
         row = QHBoxLayout()
         row.setSpacing(10)
-        title = label(cipher.name, "h1", wrap=True)
-        title.setMinimumWidth(160)
+        name, sub = split_name(cipher.name)
+        title = label(name.replace("-", "\u2011"), "h1", wrap=True)  # non-breaking hyphen: no "One-/time"
+        title.setMinimumWidth(120)
         row.addWidget(title)
         chip = label(cipher.family, "chip")
         row.addWidget(chip, 0, Qt.AlignVCenter)
@@ -85,13 +141,15 @@ class CipherPage(QWidget):
                       0, Qt.AlignVCenter)
         row.addStretch(1)
         titles.addLayout(row)
-        titles.addWidget(label(cipher.summary, "muted", wrap=True))
+        summary = label((f"<b>{html.escape(sub)}</b> · " if sub else "") + html.escape(cipher.summary), "muted", wrap=True)
+        summary.setTextFormat(Qt.RichText)
+        titles.addWidget(summary)
         head.addLayout(titles, 1)
         self.tabs = SegmentedTabs()
         head.addWidget(self.tabs.bar, 0, Qt.AlignVCenter)
         lay.addLayout(head)
         self.visual = VisualizeTab(cipher)
-        self.tabs.addTab(vscroll(self.visual), "Encrypt / Decrypt")
+        self.tabs.addTab(self.visual, "Encrypt / Decrypt")
         if cipher.crackable:
             self.crack = CrackTab(cipher)
             self.tabs.addTab(vscroll(self.crack, 640), "Crack")
@@ -117,7 +175,11 @@ class VisualizeTab(QWidget):
         self._revealed = True
         self._last_step = -1
 
-        split = QSplitter(Qt.Vertical)
+        # Two panes: controls (own scroll area) | visualization (full height, own scroll area).
+        # On narrow windows the panes stack vertically instead.
+        split = QSplitter(Qt.Horizontal)
+        split.setChildrenCollapsible(False)
+        split.setHandleWidth(12)
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(split)
@@ -145,23 +207,29 @@ class VisualizeTab(QWidget):
         inp.add(self.input, 1)
 
         # Key card
+        keep_text = ("Keep spaces, punctuation and letter case" if cipher.preserves_layout
+                     else "Keep spaces and punctuation")
         key = Card("Key", f"{cipher.name} — key settings",
-                   params_help(cipher.params) + "\n\n**Keep spaces, punctuation and letter case** — available for "
-                   "substitution ciphers only; otherwise the output is letters only (ciphertext UPPERCASE, "
-                   "plaintext lowercase).")
+                   params_help(cipher.params) + f"\n\n**{keep_text}** — spaces and punctuation stay where they were "
+                   "in the input. " + ("Each letter also keeps its upper/lower case." if cipher.preserves_layout else
+                   "Letter case is not kept because this cipher moves letters: ciphertext is UPPERCASE, plaintext "
+                   "lowercase; padding letters are added after the last letter.") + " Turn it off to get letters "
+                   "only.")
         self.form = ParamForm(cipher.params, lambda: max(1, len(clean(self.input.toPlainText()))))
         key.add(self.form)
-        self.keep = WrapCheckBox("Keep spaces, punctuation and letter case")
-        self.keep.setEnabled(cipher.preserves_layout)
-        self.keep.setChecked(cipher.preserves_layout)  # on by default where the cipher supports it
-        if not cipher.preserves_layout:
-            self.keep.setToolTip("Not available: this cipher changes letter positions or the text length.")
+        self.keep = WrapCheckBox(keep_text)
+        self.keep.setChecked(True)  # on by default
         key.add(self.keep)
         key.body.addStretch(1)
 
         # Actions (wrap onto two lines when narrow)
         act = QWidget()
-        actions = FlowLayout(act, spacing=10)
+        act_lay = QVBoxLayout(act)
+        act_lay.setContentsMargins(0, 0, 0, 0)
+        act_lay.setSpacing(6)
+        btn_box = QWidget()
+        act_lay.addWidget(btn_box)
+        actions = FlowLayout(btn_box, spacing=10)
         self.enc_btn = QPushButton("🔒  Encrypt")
         self.dec_btn = QPushButton("🔓  Decrypt")
         for b, mode, sc in ((self.enc_btn, "encrypt", "Ctrl+E"), (self.dec_btn, "decrypt", "Ctrl+D")):
@@ -202,12 +270,18 @@ class VisualizeTab(QWidget):
         self.status = status_label("ok")
         self.error = status_label("error")
         self.notes = status_label("muted")
-        for w in (self.status, self.error, self.notes):
-            outc.add(w)
+        outc.add(self.status)
+        # errors and "inputs changed" notices sit right under the buttons, where the user is looking
+        act_lay.addWidget(self.error)
+        act_lay.addWidget(self.notes)
+        self._run_inputs = None
+        self.input.textChanged.connect(self._inputs_changed)
+        self.form.changed.connect(self._inputs_changed)
+        self.keep.toggled.connect(self._inputs_changed)
         self._top_grid, self._cards = grid, (inp, key, act, outc)
-        Responsive(self, 1250, callback=self._arrange)
-        self._arrange(True)
-        split.addWidget(top)
+        self.controls = vscroll(top)
+        self.controls.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        split.addWidget(self.controls)
 
         # Visualization card
         self.viz = Card("Visualization", "Visualization", visualization_help, markdown=False)
@@ -215,7 +289,8 @@ class VisualizeTab(QWidget):
         self.zoom = QSlider(Qt.Horizontal)
         self.zoom.setRange(50, 200)
         self.zoom.setValue(100)
-        self.zoom.setFixedWidth(110)
+        self.zoom.setFixedWidth(84)
+        self.zoom.setToolTip("Zoom the diagram (or Ctrl + mouse wheel over it)")
         self.zoom.valueChanged.connect(self._zoom_changed)
         self.viz.header.addWidget(self.zoom)
         self.fit = QCheckBox("Fit")
@@ -229,6 +304,13 @@ class VisualizeTab(QWidget):
         self.expand.setToolTip("Give the visualization the whole page (hides the input, key and output)")
         self.expand.toggled.connect(self._toggle_expand)
         self.viz.header.addWidget(self.expand)
+        self.popout = QPushButton("⧉  Pop out")
+        self.popout.setObjectName("ghost")
+        self.popout.setCheckable(True)
+        self.popout.setToolTip("Open the visualization in its own window (resize or maximise it freely)")
+        self.popout.toggled.connect(self._toggle_popout)
+        self.viz.header.addWidget(self.popout)
+        self._viz_window: VizWindow | None = None
         ctl = QHBoxLayout()
         ctl.setSpacing(10)
         self.player = StepPlayer()
@@ -250,46 +332,63 @@ class VisualizeTab(QWidget):
         self.scroll = QScrollArea()
         self.scroll.setWidget(self.scene)
         self.scroll.setWidgetResizable(True)
+        self.scroll.setObjectName("sceneScroll")
         self.scene.focusChanged.connect(self._ensure_visible)
+        self._pan = PanZoom(self.scroll, self.scene, self.zoom, lambda: self.fit.setChecked(False))
         self.viz.add(self.scroll, 1)
         split.addWidget(self.viz)
         split.setStretchFactor(0, 0)
         split.setStretchFactor(1, 1)
-        split.setSizes([250, 700])
-        split.setChildrenCollapsible(False)
         self.split, self.top = split, top
-        self.viz.setMinimumHeight(400)
+        self._refit = QTimer(self, singleShot=True, interval=150)
+        self._refit.timeout.connect(lambda: self.fit.isChecked() and self._fit())
+        self.scroll.viewport().installEventFilter(self)
         self.viz.setVisible(self.viz_toggle.isChecked())
+        Responsive(self, 900, callback=self._arrange)
+        self._arrange(True)
+
+    def eventFilter(self, obj, ev):
+        if obj is self.scroll.viewport() and ev.type() == QEvent.Resize:
+            self._refit.start()  # keep "Fit" true when the panel or window is resized
+        return super().eventFilter(obj, ev)
 
     def _toggle_expand(self, on: bool) -> None:
-        self.top.setVisible(not on)
+        self.controls.setVisible(not on)
         self.expand.setText("⤡  Show inputs" if on else "⤢  Expand")
-        QTimer.singleShot(0, lambda: self.fit.isChecked() and self._fit())
+        self._refit.start()
 
-    def resizeEvent(self, ev) -> None:
-        super().resizeEvent(ev)
-        QTimer.singleShot(0, self._fix_split)
-
-    def _fix_split(self) -> None:
-        """Never let the splitter squeeze the input/key/output area below what its contents need."""
-        if not hasattr(self, "split"):
-            return
-        lay = self.top.layout()
-        need = self.top.minimumSizeHint().height()
-        if lay.hasHeightForWidth() and self.top.width() >= 600:  # wrapped labels need more height when narrow
-            need = max(need, lay.totalMinimumHeightForWidth(self.top.width()))
-        self.top.setMinimumHeight(need)
-        if not self.top.isVisible():
-            return
-        sizes = self.split.sizes()
-        snap = getattr(self, "_snap", True)  # after a layout switch, return to a compact top area
-        if self.viz.isVisible() and sizes and (sizes[0] < need or (snap and sizes[0] > need + 8)):
-            total = sum(sizes)
-            self.split.setSizes([need, max(self.viz.minimumHeight(), total - need)])
-            self._snap = False
+    def _toggle_popout(self, on: bool) -> None:
+        if on:
+            if self.expand.isChecked():
+                self.expand.setChecked(False)
+            self.expand.hide()
+            self._viz_window = VizWindow(self, f"{self.cipher.name} — visualization")
+            self._viz_window.closed.connect(lambda: self.popout.setChecked(False))
+            self._viz_window.body.addWidget(self.viz)
+            self.viz.show()
+            self._viz_window.resize(max(900, self.viz.width()), max(640, self.viz.height()))
+            self._viz_window.show()
+            self.popout.setText("⧉  Dock back")
+            self.viz_toggle.setEnabled(False)
+        else:
+            win, self._viz_window = self._viz_window, None
+            self.split.addWidget(self.viz)
+            self.viz.setVisible(self.viz_toggle.isChecked())
+            self.expand.show()
+            self.popout.setText("⧉  Pop out")
+            self.viz_toggle.setEnabled(True)
+            if win:
+                win.closed.disconnect()
+                win.close()
+                win.deleteLater()
+        self._arrange(self._wide)
+        self._refit.start()
 
     def _arrange(self, wide: bool) -> None:
-        """Three columns on wide windows (Input | Key + actions | Output), two columns otherwise."""
+        """Wide: one column of cards beside the visualization. Narrow: two columns above it."""
+        self._wide = wide
+        # A single column only makes sense when the visualization sits beside the cards.
+        beside = self.viz_toggle.isChecked() and not self.popout.isChecked()
         grid = self._top_grid
         inp, key, act, outc = self._cards
         for w in self._cards:
@@ -297,14 +396,17 @@ class VisualizeTab(QWidget):
         for i in range(4):
             grid.setColumnStretch(i, 0)
             grid.setRowStretch(i, 0)
-        if wide:
-            grid.addWidget(inp, 0, 0, 2, 1)
-            grid.addWidget(key, 0, 1)
-            grid.addWidget(act, 1, 1)
-            grid.addWidget(outc, 0, 2, 2, 1)
-            for c in range(3):
-                grid.setColumnStretch(c, 1)
+        if wide and beside:
+            grid.addWidget(inp, 0, 0)
+            grid.addWidget(key, 1, 0)
+            grid.addWidget(act, 2, 0)
+            grid.addWidget(outc, 3, 0)
+            grid.setColumnStretch(0, 1)
             grid.setRowStretch(0, 1)
+            grid.setRowStretch(3, 1)
+            self.split.setOrientation(Qt.Horizontal)
+            self.controls.setMinimumSize(330, 0)
+            self.controls.setMaximumWidth(16777215)
         else:
             grid.addWidget(inp, 0, 0)
             grid.addWidget(key, 1, 0)
@@ -313,11 +415,26 @@ class VisualizeTab(QWidget):
             grid.setColumnStretch(0, 1)
             grid.setColumnStretch(1, 1)
             grid.setRowStretch(0, 1)
-        self._snap = True
-        QTimer.singleShot(0, self._fix_split)
+            self.split.setOrientation(Qt.Horizontal if wide else Qt.Vertical)
+            self.controls.setMinimumSize(0, 120)
+        QTimer.singleShot(0, self._initial_sizes)
+
+    def _initial_sizes(self) -> None:
+        if self.split.count() < 2 or not self.viz.isVisible():
+            return
+        if self._wide:
+            total = self.split.width()
+            left = max(330, min(430, int(total * 0.32)))
+        else:
+            total = self.split.height()
+            need = self.top.minimumSizeHint().height() + 4
+            left = max(120, min(need, int(total * 0.45), total - self.viz.minimumSizeHint().height() - 2))
+        self.split.setSizes([left, max(1, total - left)])
 
     # ---------------------------------------------------------------------------------------
     def load(self, mode: str, text: str, params: dict) -> None:
+        self._cancel_run()
+        self._run_inputs = None
         self.mode = mode
         self.input.setPlainText(text)
         self.form.set_values(params)
@@ -340,38 +457,50 @@ class VisualizeTab(QWidget):
 
     def _toggle_viz(self, on: bool) -> None:
         QSettings().setValue("visualize", on)
+        if not on and self.popout.isChecked():
+            self.popout.setChecked(False)
         self.viz.setVisible(on)
         if not on and self.expand.isChecked():
             self.expand.setChecked(False)
         if not on:
             self.player.stop()
             self._reveal()
+        self._arrange(self._wide)
 
     def run(self, mode: str) -> None:
+        self._cancel_run()
         self.mode = mode
         text = self.input.toPlainText()
-        params = {**self.cipher.defaults(), **self.form.values()}
         for lbl in (self.error, self.notes, self.status):
             lbl.clear()
         letters = clean(text)
         if not letters:
-            self.error.setText("⚠  Enter some text first.")
+            self._fail("Enter some text first — it needs at least one letter A–Z.", [self.input])
             return
         try:
+            params = {**self.cipher.defaults(), **self.form.values()}
             out = self.cipher.run(text, mode, params, self.keep.isChecked())
-            trace = self.cipher.trace(letters, mode, **params) if self.viz_toggle.isChecked() else None
         except CipherError as e:
-            self.output.clear()
-            self.error.setText(f"⚠  {e}")
+            self._fail(str(e), self._fields_for(str(e)))
             return
-        except Exception as e:  # keep the app alive, but tell the user
-            self.output.clear()
-            self.error.setText(f"⚠  Unexpected error: {type(e).__name__}: {e}")
+        except Exception as e:  # a bug — keep the app alive and say so plainly
+            traceback.print_exc()
+            self._fail(f"Something went wrong ({type(e).__name__}: {e}). Check the key and try again.", [])
             return
+        trace = None
+        if self.viz_toggle.isChecked():
+            try:
+                trace = self.cipher.trace(letters, mode, **params)
+            except Exception as e:  # the result is fine; only the animation failed
+                traceback.print_exc()
+                self.notes.setText(f"The step-by-step view is not available for this input ({e}). "
+                                   "The result is shown directly.")
         self._pending, self._revealed, self.trace = out, False, trace
-        if trace:
+        self._run_inputs = self._snapshot()
+        if trace and trace.steps:
             self.output.clear()
-            self.notes.setText(" ".join(trace.notes))
+            if trace.notes:
+                self.notes.setText(" ".join(trace.notes))
             self.loading.start("Encrypting" if mode == "encrypt" else "Decrypting")
             if self.fit.isChecked():
                 self._fit()
@@ -380,6 +509,60 @@ class VisualizeTab(QWidget):
             self.player.play()
         else:
             self._reveal()
+
+    def _cancel_run(self) -> None:
+        """Stop whatever the previous run was doing (animation, loading overlay) before anything else."""
+        self.player.stop()
+        self.loading.stop()
+        self._revealed = True
+        self._clear_flags()
+
+    def _fail(self, message: str, fields: list) -> None:
+        self.trace = None
+        self._run_inputs = None
+        self.player.set_count(0)
+        self.scene.set_step(None)
+        self.explain.clear()
+        self.output.clear()
+        self.error.setText(f"⚠  {message}")
+        for w in fields:
+            w.setProperty("invalid", True)
+            w.style().unpolish(w)
+            w.style().polish(w)
+        if fields:
+            fields[0].setFocus()
+
+    def _fields_for(self, message: str) -> list:
+        """The key widgets an error message is about (by parameter name/label); all of them if unclear."""
+        msg = message.lower()
+        fields = [(p, self.form.widgets[p.name]) for p in self.cipher.params if p.kind != "bool"]
+        hits = [w for p, w in fields if p.name.lower() in msg or p.label.lower() in msg]
+        if not hits and ("text" in msg or "message" in msg) and "key" not in msg:
+            return [self.input]
+        return hits or [w for _, w in fields]
+
+    def _clear_flags(self) -> None:
+        for w in [self.input, *self.form.widgets.values()]:
+            if w.property("invalid"):
+                w.setProperty("invalid", False)
+                w.style().unpolish(w)
+                w.style().polish(w)
+
+    def _snapshot(self) -> tuple:
+        return self.input.toPlainText(), repr(self.form.values()), self.keep.isChecked()
+
+    def _inputs_changed(self) -> None:
+        """Editing while (or after) a run is fine: the run keeps going, and we say how to refresh it."""
+        self._clear_flags()
+        if self.error.text():
+            self.error.clear()
+        if getattr(self, "_run_inputs", None) is None:
+            return
+        if self._snapshot() != self._run_inputs:
+            what = "The animation shows" if not self._revealed else "The output is from"
+            self.notes.setText(f"✎  Inputs changed. {what} the previous run — press Encrypt or Decrypt to update.")
+        else:
+            self.notes.clear()
 
     def _reveal(self) -> None:
         if self._revealed:
@@ -391,8 +574,18 @@ class VisualizeTab(QWidget):
         self.status.setText(f"✔  {'Encrypted' if self.mode == 'encrypt' else 'Decrypted'} — {n} letters.")
 
     def _show_step(self, i: int) -> None:
-        if not self.trace:
+        if not self.trace or not (0 <= i < len(self.trace.steps)):
             return
+        try:
+            self._render_step(i)
+        except Exception as e:
+            traceback.print_exc()
+            self.player.stop()
+            self._reveal()
+            self.notes.setText(f"The step-by-step view stopped at step {i + 1} ({type(e).__name__}). "
+                               "The result above is still correct.")
+
+    def _render_step(self, i: int) -> None:
         st = self.trace.steps[i]
         detail = html.escape(st.detail).replace("\n", "<br>")
         ui = theme().ui
@@ -421,7 +614,7 @@ class VisualizeTab(QWidget):
         sample = animated[:: max(1, len(animated) // 12)] + animated[-1:]
         w = max(self.scene.natural_size(st)[0] for st in sample)
         h = max(self.scene.natural_size(st)[1] for st in sample)
-        z = max(0.72, min(1.25, vw / w, vh / h))
+        z = max(0.6, min(1.25, vw / w, vh / h))
         self.zoom.blockSignals(True)
         self.zoom.setValue(int(z * 100))
         self.zoom.blockSignals(False)
@@ -633,6 +826,14 @@ class CrackTab(QWidget):
         if self.worker:
             self.worker.ctx.cancel()
             self.status.setText("Stopping…")
+
+    def shutdown(self) -> None:
+        """Called when the app closes: stop a running attack and wait for its thread to finish."""
+        if self.thread is not None and self.thread.isRunning():
+            if self.worker:
+                self.worker.ctx.cancel()
+            self.thread.quit()
+            self.thread.wait(5000)
 
     def _progress(self, f: float, msg: str) -> None:
         self.progress.setValue(int(f * 1000))

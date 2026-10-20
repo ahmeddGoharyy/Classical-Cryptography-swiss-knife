@@ -73,6 +73,11 @@ ICONS = {
 }
 
 
+def _rgba(hex_color: str, alpha: float) -> str:
+    h = hex_color.lstrip("#")
+    return f"rgba({int(h[0:2], 16)}, {int(h[2:4], 16)}, {int(h[4:6], 16)}, {alpha})"
+
+
 def _pick(candidates: list[str]) -> str:
     families = set(QFontDatabase.families())
     return next((f for f in candidates if f in families), candidates[-1])
@@ -164,7 +169,7 @@ class ThemeManager(QObject):
             QListWidget#paletteList::item:selected {{ background: {c['accent_soft']}; }}
 
             /* ---------- grouped sidebar ---------- */
-            QLabel#brandTile {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {c['accent']}, stop:1 {c['button']});
+            QLabel#brandTile {{ background: {c['accent']};
                 border-radius: 12px; font-size: 17pt; }}
             QLineEdit#navSearch {{ background: {c['input']}; border-radius: 10px; padding: 7px 10px; }}
             QWidget#navArea {{ background: transparent; }}
@@ -200,7 +205,8 @@ class ThemeManager(QObject):
             QLabel#h2 {{ font-size: 12pt; font-weight: 650; }}
             QLabel#hero {{ font-size: 28pt; font-weight: 800; }}
             QLabel#muted {{ color: {c['muted']}; }}
-            QLabel#error {{ color: {c['bad']}; font-weight: 500; }}
+            QLabel#error {{ color: {c['bad']}; font-weight: 600; background: {_rgba(c['bad'], 0.12)};
+                border: 1px solid {_rgba(c['bad'], 0.45)}; border-radius: 8px; padding: 8px 10px; }}
             QLabel#ok {{ color: {c['good']}; font-weight: 500; }}
             QLabel#chip, QFrame#card QLabel#chip {{ color: {c['accent']}; background: {c['accent_soft']}; border-radius: 10px;
                 padding: 3px 10px; font-size: 9pt; font-weight: 600; }}
@@ -210,7 +216,7 @@ class ThemeManager(QObject):
             /* ---------- cards ---------- */
             QFrame#card {{ background: {c['card']}; border: 1px solid {c['border']}; border-radius: 14px; }}
             QFrame#card QLabel {{ background: transparent; }}
-            QFrame#hero {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {c['accent']}, stop:1 {c['button']});
+            QFrame#hero {{ background: {c['accent']};
                 border-radius: 20px; }}
             QFrame#hero QLabel {{ color: white; background: transparent; }}
             QPushButton#heroButton {{ background: rgba(255,255,255,0.18); color: white; border: 1px solid rgba(255,255,255,0.55);
@@ -224,6 +230,8 @@ class ThemeManager(QObject):
                 selection-background-color: {c['accent']}; selection-color: white; }}
             QPlainTextEdit, QTextBrowser {{ padding: 8px 10px; }}
             QPlainTextEdit:focus, QLineEdit:focus, QSpinBox:focus, QComboBox:focus {{ border: 1px solid {c['accent']}; }}
+            QPlainTextEdit[invalid="true"], QLineEdit[invalid="true"], QSpinBox[invalid="true"],
+            QComboBox[invalid="true"] {{ border: 1.5px solid {c['bad']}; }}
             QComboBox {{ padding-right: 28px; min-height: 20px; }}
             QComboBox:hover, QSpinBox:hover, QLineEdit:hover {{ border-color: {c['muted']}; }}
             QComboBox::drop-down {{ border: none; width: 26px; subcontrol-position: center right; }}

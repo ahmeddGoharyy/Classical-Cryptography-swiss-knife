@@ -4,14 +4,14 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QEvent, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QConicalGradient, QFont, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
 from .theme import theme
 
 
 class LoadingOverlay(QWidget):
-    """Covers its parent with a spinning gradient ring, an animated label and a progress bar."""
+    """Covers its parent with a spinning ring, an animated label and a progress bar."""
 
     def __init__(self, parent: QWidget):
         super().__init__(parent)
@@ -77,15 +77,8 @@ class LoadingOverlay(QWidget):
         qp.setPen(QPen(QColor(ui["border"]), 6))
         qp.setBrush(Qt.NoBrush)
         qp.drawEllipse(QRectF(cx - r, cy - r, 2 * r, 2 * r))
-        # spinning gradient arc (blue → green)
-        grad = QConicalGradient(cx, cy, -self._angle)
-        grad.setColorAt(0.0, QColor(ui["accent"]))
-        grad.setColorAt(0.5, QColor(ui["button"]))
-        transparent = QColor(ui["button"])
-        transparent.setAlpha(0)
-        grad.setColorAt(0.75, transparent)
-        grad.setColorAt(1.0, QColor(ui["accent"]))
-        pen = QPen(grad, 6)
+        # spinning arc (flat accent colour)
+        pen = QPen(QColor(ui["accent"]), 6)
         pen.setCapStyle(Qt.RoundCap)
         qp.setPen(pen)
         qp.drawArc(QRectF(cx - r, cy - r, 2 * r, 2 * r), int(-self._angle * 16), int(270 * 16))

@@ -85,7 +85,7 @@ class Cipher:
     help = ""             # Markdown shown in the "?" help window
     params: list[Param] = []
     crack_params: list[Param] = []
-    preserves_layout = True   # output letter i depends only on input letter i (keep spaces/case possible)
+    preserves_layout = True   # output letter i depends only on input letter i (letter case can be kept too)
     crackable = True
     crack_hint = ""
     manual_solver: str | None = None  # "substitution" adds the interactive mapping editor
@@ -112,7 +112,7 @@ class Cipher:
             return ""
         p = {**self.defaults(), **params}
         out = self.encrypt(letters, **p) if mode == "encrypt" else self.decrypt(letters, **p)
-        return restore_format(text, out, keep_format and self.preserves_layout, mode == "encrypt")
+        return restore_format(text, out, keep_format, mode == "encrypt", keep_case=self.preserves_layout)
 
 
 _REGISTRY: dict[str, Cipher] = {}

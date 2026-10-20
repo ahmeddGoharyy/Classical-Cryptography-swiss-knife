@@ -209,7 +209,7 @@ Letter frequencies stay **exactly** like English.
                                       [[in_grid], [self._table(src, ranks, labels, set(range(len(src))), hl_col=j,
                                                                fill=fill)],
                                        [stream_grid(rows_out, pos + lens[j] - 1)]],
-                                      [Arrow(f"rk{j}", f"c{ks[0]}", f"rank {r}", 0, kind="key")]
+                                      [Arrow(f"rk{j}", f"c{ks[0]}", f"rank {r}", 0, kind="key") for _ in ks[:1]]
                                       + fan(((f"c{k}", f"out{pos + q}") for q, k in enumerate(ks)), 1,
                                             "top → bottom", "result")))
                     pos += lens[j]
@@ -233,7 +233,7 @@ Letter frequencies stay **exactly** like English.
                                       f"The next {lens[j]} ciphertext letters “{seg}” go down column {j + 1} "
                                       f"(rank {r}).",
                                       [[in_grid], [self._table(out, ranks, labels, set(filled), hl_col=j)]],
-                                      [Arrow(f"rk{j}", f"c{ks[0]}", f"rank {r}", 0, kind="key")]
+                                      [Arrow(f"rk{j}", f"c{ks[0]}", f"rank {r}", 0, kind="key") for _ in ks[:1]]
                                       + fan(((f"in{pos + q}", f"c{k}") for q, k in enumerate(ks)), 1, "top → bottom")))
                     pos += lens[j]
                 rows_out = [Row("P.T", list(out), "result", id="out")]

@@ -8,6 +8,7 @@ from ..core.cipher import get_cipher
 from .cipher_page import CipherPage
 from .frequency_page import FrequencyPage
 from .home_page import HomePage
+from .logo import app_icon
 from .sidebar import Sidebar
 
 
@@ -15,6 +16,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Classical Cryptography Swiss Knife")
+        self.setWindowIcon(app_icon())
         self.setMinimumSize(980, 600)
         self.resize(1480, 920)
         self.pages: dict[str, QWidget] = {}
@@ -36,7 +38,7 @@ class MainWindow(QMainWindow):
     def open_page(self, key: str) -> None:
         if key not in self.pages:
             if key == "home":
-                page = HomePage(open_palette=self.sidebar.focus_search)
+                page = HomePage()
             elif key == "freq":
                 page = FrequencyPage()
             else:
@@ -45,3 +47,10 @@ class MainWindow(QMainWindow):
             self.stack.addWidget(page)
         self.sidebar.select(key)
         self.stack.setCurrentWidget(self.pages[key])
+
+    def closeEvent(self, ev) -> None:
+        for page in self.pages.values():
+            crack = getattr(page, "crack", None)
+            if crack is not None:
+                crack.shutdown()
+        super().closeEvent(ev)

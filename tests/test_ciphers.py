@@ -77,6 +77,11 @@ def test_roundtrip_and_trace(cipher):
 def test_keep_format():
     assert run("caesar", "Hello, World!", keep=True, shift=3) == "Khoor, Zruog!"
     assert run("vigenere", "Hi there", keep=True, key="b") == "Ij uifsf"
+    # ciphers that move letters keep spaces/punctuation but use the default case
+    assert run("railfence", "We are, discovered!", keep=True, rails=3) == run("railfence", "wearediscovered", rails=3)[:2] + " " \
+        + run("railfence", "wearediscovered", rails=3)[2:5] + ", " + run("railfence", "wearediscovered", rails=3)[5:] + "!"
+    pf = run("playfair", "Hello, world", keep=True)
+    assert pf.count(",") == 1 and pf.index(",") == 5 and pf.replace(",", "").replace(" ", "") == run("playfair", "Hello world")
 
 
 LETTER = ("Cdzq Rstcdmsr, Sghr vddj gzr addm z khsskd cheedqdms eqnl zkk sgd nsgdqr xnt'ud dwodqhdmbdc adenqd. "
@@ -152,3 +157,11 @@ def test_arrows_point_at_existing_cells(cipher):
                     collect(panel)
             for a in st.arrows:
                 assert a.src in ids and a.dst in ids, (mode, st.title, a)
+
+
+def test_columnar_short_text_has_empty_columns():
+    # a key longer than the text leaves empty columns; the trace must still build
+    c = get_cipher("columnar")
+    for key in ("zz", "abc def"):
+        for mode in ("encrypt", "decrypt"):
+            assert c.trace("x", mode, **{**c.defaults(), "key": key}).steps
