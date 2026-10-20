@@ -6,7 +6,7 @@ import traceback
 
 from PySide6.QtCore import QEvent, QObject, QRectF, QSettings, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import (QAbstractItemView, QBoxLayout, QCheckBox, QComboBox, QGridLayout, QHBoxLayout, QHeaderView,
+from PySide6.QtWidgets import (QAbstractItemView, QApplication, QBoxLayout, QCheckBox, QComboBox, QGridLayout, QHBoxLayout, QHeaderView,
                                QLabel, QLineEdit, QProgressBar, QPushButton, QScrollArea, QSlider, QSplitter,
                                QTableWidget, QTableWidgetItem, QTextBrowser, QVBoxLayout, QWidget)
 
@@ -49,7 +49,9 @@ def visualization_help() -> str:
         "<h3>Controls</h3><ul>"
         "<li><b>▶ / ❚❚</b> play or pause (Space)</li>"
         "<li><b>◀ ▶</b> previous / next step (← →), <b>⏮ ⏭</b> first / last step (Home / End)</li>"
+        "<li>The keys work while the visualization has focus — click the diagram first if needed.</li>"
         "<li>Drag the slider to scrub, choose a speed, or press <b>Skip to result</b>.</li>"
+        "<li>Drag the diagram to pan it; Ctrl + mouse wheel zooms.</li>"
         "<li>Zoom the diagram with the zoom slider.</li></ul>"
         "<h3>Arrows — what goes where</h3><p>Each step plays as a short animation: arrows draw themselves "
         "in order (①, ②, ③…), a token carrying the value travels along each one, and the destination cell "
@@ -78,6 +80,7 @@ class PanZoom(QObject):
     def eventFilter(self, obj, ev):
         t = ev.type()
         if t == QEvent.MouseButtonPress and ev.button() in (Qt.LeftButton, Qt.MiddleButton):
+            self.scene.setFocus(Qt.MouseFocusReason)  # so the player's keyboard shortcuts work afterwards
             self._last = ev.globalPosition().toPoint()
             self.scene.setCursor(Qt.ClosedHandCursor)
             return True
@@ -315,6 +318,7 @@ class VisualizeTab(QWidget):
         ctl.setSpacing(10)
         self.player = StepPlayer()
         self.player.stepChanged.connect(self._show_step)
+        self.player.bind_keys(self.viz)
         ctl.addWidget(self.player, 1)
         skip = QPushButton("Skip to result")
         skip.setObjectName("ghost")
@@ -342,13 +346,13 @@ class VisualizeTab(QWidget):
         self.split, self.top = split, top
         self._refit = QTimer(self, singleShot=True, interval=150)
         self._refit.timeout.connect(lambda: self.fit.isChecked() and self._fit())
-        self.scroll.viewport().installEventFilter(self)
+        self.scroll.installEventFilter(self)
         self.viz.setVisible(self.viz_toggle.isChecked())
         Responsive(self, 900, callback=self._arrange)
         self._arrange(True)
 
     def eventFilter(self, obj, ev):
-        if obj is self.scroll.viewport() and ev.type() == QEvent.Resize:
+        if obj is self.scroll and ev.type() == QEvent.Resize:
             self._refit.start()  # keep "Fit" true when the panel or window is resized
         return super().eventFilter(obj, ev)
 
@@ -507,6 +511,8 @@ class VisualizeTab(QWidget):
             self._last_step = -1
             self.player.set_count(len(trace.steps), start=0)
             self.player.play()
+            if QApplication.focusWidget() in (self.enc_btn, self.dec_btn):
+                self.scene.setFocus()  # Space / arrow keys now control the animation
         else:
             self._reveal()
 
@@ -608,12 +614,14 @@ class VisualizeTab(QWidget):
         """Choose one zoom for the whole trace so every step fits the visible area."""
         if not self.trace:
             return
-        vw = max(200, self.scroll.viewport().width() - 8)
-        vh = max(150, self.scroll.viewport().height() - 8)
+        area = self.scroll.contentsRect()  # whole area: scrollbars currently shown must not shrink the fit
+        vw = max(200, area.width() - 8)
+        vh = max(150, area.height() - 8)
         animated = [st for st in self.trace.steps if st.arrows] or self.trace.steps
-        sample = animated[:: max(1, len(animated) // 12)] + animated[-1:]
-        w = max(self.scene.natural_size(st)[0] for st in sample)
-        h = max(self.scene.natural_size(st)[1] for st in sample)
+        sample = animated[:: max(1, len(animated) // 24)] + animated[-1:]
+        sizes = self.scene.natural_sizes(sample)
+        w = max(1, max(sz[0] for sz in sizes))
+        h = max(1, max(sz[1] for sz in sizes))
         z = max(0.6, min(1.25, vw / w, vh / h))
         self.zoom.blockSignals(True)
         self.zoom.setValue(int(z * 100))
@@ -819,12 +827,14 @@ class CrackTab(QWidget):
         self.worker.done.connect(self.thread.quit)
         self.worker.failed.connect(self.thread.quit)
         self.thread.finished.connect(self._finished)
+        self.thread.finished.connect(self.thread.deleteLater)
         self.status.setText("Working…")
         self.thread.start()
 
     def stop(self) -> None:
-        if self.worker:
+        if self.worker and self.thread is not None and self.thread.isRunning():
             self.worker.ctx.cancel()
+            self.stop_btn.setEnabled(False)
             self.status.setText("Stopping…")
 
     def shutdown(self) -> None:
@@ -846,14 +856,22 @@ class CrackTab(QWidget):
     def _finished(self) -> None:
         self.go_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
+        if self.status.text() == "Stopping…":
+            self.status.setText("Stopped.")
         if self.worker:
             self.worker.deleteLater()
         self.worker = None
+        self.thread = None  # deleted via deleteLater; never touch it again
 
     def _done(self, res: CrackResult) -> None:
         self.result = res
         self.progress.setValue(1000)
-        self.status.setText(f"Done — {len(res.candidates)} candidate(s)." if res.candidates else "Done.")
+        stopped = self.worker is not None and self.worker.ctx.cancelled
+        n = len(res.candidates)
+        if stopped:
+            self.status.setText(f"Stopped — best {n} candidate(s) found so far." if n else "Stopped.")
+        else:
+            self.status.setText(f"Done — {n} candidate(s)." if n else "Done — no candidates; see the analysis log.")
         self.log.setPlainText("\n".join(res.log))
         self.table.setRowCount(len(res.candidates))
         for i, c in enumerate(res.candidates):

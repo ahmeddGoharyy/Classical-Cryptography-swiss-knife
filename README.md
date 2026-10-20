@@ -1,4 +1,4 @@
-<p align="center"><img src="cryptoknife/data/logo.svg" width="140" alt="logo"></p>
+<p align="center"><img src="Docs/logo.png" width="260" alt="Crypto Swiss Knife logo"></p>
 
 # Classical Cryptography Swiss Knife
 

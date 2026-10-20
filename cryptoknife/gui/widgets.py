@@ -6,7 +6,7 @@ from typing import Callable
 import matplotlib
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
-from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QLocale, QObject, QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (QBoxLayout, QButtonGroup, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
                                QHBoxLayout, QLabel, QLayout, QScrollArea, QLineEdit, QPlainTextEdit, QPushButton, QSizePolicy, QSpinBox,
@@ -244,6 +244,7 @@ class ParamForm(QWidget):
     def _make(self, p: Param) -> QWidget:
         if p.kind == "int":
             w = QSpinBox()
+            w.setLocale(QLocale(QLocale.English, QLocale.UnitedStates))  # Western digits and "-" sign always
             w.lineEdit().setTextMargins(6, 0, 0, 0)
             w.setRange(p.minimum, p.maximum)
             w.setValue(int(p.default))
@@ -320,7 +321,10 @@ class ChartView(FigureCanvasQTAgg):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMinimumHeight(int(height * 55))
         self._chart: Chart | None = None
-        theme().changed.connect(lambda: self.show_chart(self._chart))
+        theme().changed.connect(self._retheme)  # bound method: auto-disconnected when the chart is deleted
+
+    def _retheme(self) -> None:
+        self.show_chart(self._chart)
 
     def show_chart(self, chart: Chart | None) -> None:
         self._chart = chart
@@ -412,15 +416,16 @@ class FlowLayout(QLayout):
     def minimumSize(self):
         size = QSize()
         for it in self._items:
-            size = size.expandedTo(it.minimumSize())
+            if it.widget() is None or not it.widget().isHidden():
+                size = size.expandedTo(it.minimumSize())
         m = self.contentsMargins()
         return size + QSize(m.left() + m.right(), m.top() + m.bottom())
 
     def _do_layout(self, rect, test_only):
         x, y, line_h = rect.x(), rect.y(), 0
         for it in self._items:
-            if it.widget() is not None and not it.widget().isVisible() and not test_only:
-                pass
+            if it.widget() is not None and it.widget().isHidden():
+                continue  # hidden on purpose: takes no space
             hint = it.sizeHint()
             nx = x + hint.width() + self._spacing
             if nx - self._spacing > rect.right() + 1 and line_h > 0:
@@ -428,7 +433,7 @@ class FlowLayout(QLayout):
                 nx = x + hint.width() + self._spacing
                 line_h = 0
             if not test_only:
-                it.setGeometry(QRect(QPoint(x, y + (0 if line_h == 0 else 0)), hint))
+                it.setGeometry(QRect(QPoint(x, y), hint))
             x = nx
             line_h = max(line_h, hint.height())
         return y + line_h - rect.y()

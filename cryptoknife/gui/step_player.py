@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QSlider, QToolButton, QWidget
 
 from .theme import theme
@@ -22,6 +23,7 @@ class StepPlayer(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
         self._buttons: list[tuple[QToolButton, str]] = []
+        self._keys: list[tuple[str, object]] = []
 
         def btn(icon, tip, fn, key=None, main=False):
             b = QToolButton()
@@ -31,7 +33,7 @@ class StepPlayer(QWidget):
             b.setToolTip(tip)
             b.clicked.connect(fn)
             if key:
-                b.setShortcut(key)
+                self._keys.append((key, fn))
             lay.addWidget(b)
             self._buttons.append((b, icon))
             return b
@@ -59,6 +61,13 @@ class StepPlayer(QWidget):
         lay.addWidget(self.speed)
         self._refresh_icons()
         theme().changed.connect(self._refresh_icons)
+
+    def bind_keys(self, scope: QWidget) -> None:
+        """Keyboard control (Space, ←/→, Home/End) only while focus is inside ``scope``, so typing in
+        text boxes or toggling checkboxes elsewhere never moves the animation."""
+        for key, fn in self._keys:
+            sc = QShortcut(QKeySequence(key), scope, fn)
+            sc.setContext(Qt.WidgetWithChildrenShortcut)
 
     def _refresh_icons(self) -> None:
         playing = self.timer.isActive()

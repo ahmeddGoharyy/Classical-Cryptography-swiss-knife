@@ -16,7 +16,7 @@ This document lists every algorithm built into **Classical Cryptography Swiss Kn
 
 | # | Cipher | Family | Key | Key space | Crack method in the app |
 |---|---|---|---|---|---|
-| 1 | Caesar | Monoalphabetic substitution | shift k (0–25) | 25 | Brute force over all 26 shifts |
+| 1 | Caesar | Monoalphabetic substitution | shift k (any integer, e.g. −3; used mod 26) | 25 | Brute force over all 26 shifts |
 | 2 | Monoalphabetic | Monoalphabetic substitution | permutation of the alphabet, or a keyword | 26! ≈ 4 × 10²⁶ | Frequency analysis, then hill climbing, plus a manual solver |
 | 3 | Vigenère (repeating key) | Polyalphabetic substitution | keyword | 26^m | Kasiski + index of coincidence, then a Caesar per column |
 | 4 | Vigenère (autokey) | Polyalphabetic substitution | keyword (followed by the plaintext) | 26^m | Per-column chi² for each keyword length |
@@ -53,7 +53,7 @@ This document lists every algorithm built into **Classical Cryptography Swiss Kn
 Worked step from the Section 1 example: S = 18 → (18 + 8) mod 26 = 26 mod 26 = 0 → **A**.
 
 **Visualizer:**
-- A **cipher wheel** (outer ring = plain, inner ring = cipher) **rotates one position per step** until it reaches the shift k.
+- A **cipher wheel** (outer ring = plain, inner ring = cipher) **rotates one position per step** until it reaches the shift k — to the left for a negative k (k = −3 is the same cipher as k = 23).
 - For each letter, **hop arrows count +1, +2, … +k** along the plain alphabet, including the Z → A wrap-around. The shift table below confirms the same pair, and the wheel lights it up.
 - The input table (P.T / index) and output table (C.T index / C.T) fill in as each result token lands.
 

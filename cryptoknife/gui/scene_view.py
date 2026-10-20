@@ -32,6 +32,7 @@ class SceneView(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setFocusPolicy(Qt.ClickFocus)
         self.step: Step | None = None
         self.zoom = 1.0
         self._items: list[tuple] = []
@@ -63,13 +64,20 @@ class SceneView(QWidget):
 
     def natural_size(self, step: Step) -> tuple[float, float]:
         """Size of ``step`` at zoom 1 (does not change the current view)."""
+        return self.natural_sizes([step])[0]
+
+    def natural_sizes(self, steps: list[Step]) -> list[tuple[float, float]]:
+        """Sizes of several steps at zoom 1, restoring the current view only once at the end."""
         saved = (self.step, self.zoom, self._items, self._rects, self._texts)
-        self.step, self.zoom = step, 1.0
-        self._relayout()
-        size = (self.minimumWidth(), self.minimumHeight())
+        sizes = []
+        self.zoom = 1.0
+        for step in steps:
+            self.step = step
+            self._relayout()
+            sizes.append((self.minimumWidth(), self.minimumHeight()))
         self.step, self.zoom, self._items, self._rects, self._texts = saved
         self._relayout()
-        return size
+        return sizes
 
     @staticmethod
     def _has_animation(step: Step) -> bool:
@@ -243,8 +251,8 @@ class SceneView(QWidget):
         # centre caption
         qp.setPen(QColor(ui["text"]))
         qp.setFont(self._font(13, bold=True, mono=False))
-        k = round(off) % 26
-        cap = wh.caption or f"+{k}"
+        k = round(off)
+        cap = wh.caption or (f"−{-k}" if -26 < k < 0 else f"+{k % 26}")  # negative keys keep their sign
         qp.drawText(QRectF(cx - 60 * z, cy - 18 * z, 120 * z, 24 * z), Qt.AlignCenter, cap)
         qp.setPen(QColor(ui["muted"]))
         qp.setFont(self._font(7.5, mono=False))

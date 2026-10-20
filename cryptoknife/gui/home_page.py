@@ -1,10 +1,10 @@
-"""Landing page: the logo and a short description of the app, centred."""
+"""Landing page: the emblem (with the app name) and a short description, centred."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from .logo import logo_pixmap
+from .logo import emblem_pixmap
 from .theme import theme
 from .widgets import label
 
@@ -19,12 +19,7 @@ class HomePage(QWidget):
         self.logo = QLabel()
         self.logo.setAlignment(Qt.AlignCenter)
         lay.addWidget(self.logo)
-        lay.addSpacing(18)
-        name = label("Crypto Swiss Knife")
-        name.setStyleSheet("font-size: 30pt; font-weight: 800;")
-        name.setAlignment(Qt.AlignCenter)
-        lay.addWidget(name)
-        lay.addSpacing(10)
+        lay.addSpacing(22)
         desc = label("Learn, visualize and break ciphers — watch every encryption step unfold, "
                      "or let the app find the key.", "muted", wrap=True)
         desc.setAlignment(Qt.AlignCenter)
@@ -34,5 +29,13 @@ class HomePage(QWidget):
         theme().changed.connect(self._paint_logo)
         self._paint_logo()
 
+    def resizeEvent(self, ev) -> None:
+        super().resizeEvent(ev)
+        self._paint_logo()
+
     def _paint_logo(self) -> None:
-        self.logo.setPixmap(logo_pixmap(210, color=theme().ui["text"]))
+        # the emblem already carries the name; scale it with the window (but keep room for the tagline)
+        h = max(200, min(420, self.height() - 170, self.width() - 80))
+        if getattr(self, "_logo_key", None) != (h, theme().name):
+            self._logo_key = (h, theme().name)
+            self.logo.setPixmap(emblem_pixmap(h, theme().ui["text"]))

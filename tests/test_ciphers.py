@@ -165,3 +165,14 @@ def test_columnar_short_text_has_empty_columns():
     for key in ("zz", "abc def"):
         for mode in ("encrypt", "decrypt"):
             assert c.trace("x", mode, **{**c.defaults(), "key": key}).steps
+
+
+def test_caesar_negative_and_large_shifts():
+    for k, same in ((-3, 23), (29, 3), (-29, 23), (26, 0)):
+        assert run("caesar", "Attack at dawn", keep=True, shift=k) == run("caesar", "Attack at dawn", keep=True, shift=same)
+        ct = run("caesar", "attackatdawn", shift=k)
+        assert run("caesar", ct, "decrypt", shift=k) == "attackatdawn"
+    c = get_cipher("caesar")
+    steps = c.trace("ATTACKATDAWN", "encrypt", shift=-3).steps
+    assert steps[1].title.startswith("Shift the alphabet left")
+    assert steps[-1].detail.endswith("XQQXZHXQAXTK")

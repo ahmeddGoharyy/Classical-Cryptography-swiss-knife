@@ -1,44 +1,63 @@
-"""App logo: a front-facing Spartan (Corinthian) helmet with a keyhole on the forehead.
+"""App logo: the Crypto Swiss Knife emblem (Spartan helmet in a binary/circuit ring).
 
-Flat, single colour — no gradients.
+The artwork ships as transparent masks in ``cryptoknife/data``:
+- ``logo.png``         the full emblem with the name, for the home page
+- ``logo-helmet.png``  the helmet alone, for small icons
+Both are tinted at runtime, so the logo follows the light/dark theme. Flat colours only.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QByteArray, QRectF, Qt
-from PySide6.QtGui import QIcon, QPainter, QPixmap
-from PySide6.QtSvg import QSvgRenderer
+from functools import lru_cache
+from pathlib import Path
 
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPainterPath, QPixmap
+
+DATA = Path(__file__).resolve().parent.parent / "data"
 TILE_COLOR = "#3b82f6"
 
-# 200 × 200 canvas, symmetric about x = 100.
-CREST = "M 94 46 C 93 32, 88 18, 80 6 C 93 9, 107 9, 120 6 C 112 18, 107 32, 106 46 Z"
-# helmet outline, then (even-odd holes) the face opening — almond eye slits, a nose guard hanging
-# between them, the mouth gap between the cheek guards — and a keyhole on the forehead
-HELMET = ("M 100 52 C 140 52, 164 80, 164 118 L 164 150 C 164 170, 170 184, 178 196 L 22 196 "
-          "C 30 184, 36 170, 36 150 L 36 118 C 36 80, 60 52, 100 52 Z "
-          "M 44 116 C 62 112, 80 113, 92 119 L 92 148 L 108 148 L 108 119 C 120 113, 138 112, 156 116 "
-          "C 150 128, 136 136, 117 138 L 113 196 L 87 196 L 83 138 C 64 136, 50 128, 44 116 Z "
-          "M 95 84 A 10 10 0 1 1 105 84 L 108 99 L 92 99 Z")
+
+@lru_cache(maxsize=None)
+def _mask(name: str) -> QImage:
+    return QImage(str(DATA / name)).convertToFormat(QImage.Format_ARGB32_Premultiplied)
 
 
-def logo_svg(color: str = "#e8eaed", tile: bool = False) -> str:
-    """tile=True: white helmet on a flat rounded square (app icon); otherwise the helmet alone in `color`."""
-    shapes = f"<path d='{CREST}'/><path d='{HELMET}' fill-rule='evenodd'/>"
-    if tile:
-        body = (f"<rect width='200' height='200' rx='44' fill='{TILE_COLOR}'/>"
-                f"<g transform='translate(26 22) scale(0.74)' fill='white'>{shapes}</g>")
-    else:
-        body = f"<g fill='{color}'>{shapes}</g>"
-    return f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'>{body}</svg>"
+def _tinted(name: str, color: str, w: int, h: int) -> QImage:
+    """The mask scaled to fit w × h (aspect kept), filled with ``color``."""
+    img = _mask(name).scaled(w, h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    qp = QPainter(img)
+    qp.setCompositionMode(QPainter.CompositionMode_SourceIn)
+    qp.fillRect(img.rect(), QColor(color))
+    qp.end()
+    return img
+
+
+def emblem_pixmap(height: int, color: str, dpr: float = 2.0) -> QPixmap:
+    """The full emblem (helmet, binary ring and name) in one flat colour."""
+    src = _mask("logo.png")
+    h = int(height * dpr)
+    w = int(h * src.width() / src.height())
+    pm = QPixmap.fromImage(_tinted("logo.png", color, w, h))
+    pm.setDevicePixelRatio(dpr)
+    return pm
 
 
 def logo_pixmap(size: int, tile: bool = False, color: str = "#e8eaed", dpr: float = 2.0) -> QPixmap:
-    renderer = QSvgRenderer(QByteArray(logo_svg(color, tile).encode()))
-    pm = QPixmap(int(size * dpr), int(size * dpr))
+    """The helmet alone; tile=True puts a white helmet on a flat rounded square (icons)."""
+    px = int(size * dpr)
+    pm = QPixmap(px, px)
     pm.fill(Qt.transparent)
     qp = QPainter(pm)
     qp.setRenderHint(QPainter.Antialiasing)
-    renderer.render(qp, QRectF(0, 0, pm.width(), pm.height()))
+    qp.setRenderHint(QPainter.SmoothPixmapTransform)
+    pad = 0.0
+    if tile:
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(0, 0, px, px), px * 0.22, px * 0.22)
+        qp.fillPath(path, QColor(TILE_COLOR))
+        pad = px * 0.14
+    helmet = _tinted("logo-helmet.png", "#ffffff" if tile else color, int(px - 2 * pad), int(px - 2 * pad))
+    qp.drawImage(int((px - helmet.width()) / 2), int((px - helmet.height()) / 2), helmet)
     qp.end()
     pm.setDevicePixelRatio(dpr)
     return pm

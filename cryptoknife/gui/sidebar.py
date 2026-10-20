@@ -271,6 +271,9 @@ class Sidebar(QFrame):
             g.filter(words)
 
     def _open_first(self) -> None:
+        if not self.home.isHidden():
+            self.selected.emit("home")
+            return
         for g in self.groups:
             for it in g.items:
                 if it.isVisible() and g.isVisible():

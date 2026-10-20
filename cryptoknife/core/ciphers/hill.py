@@ -124,7 +124,8 @@ Hides single-letter frequencies, but is **linear**: a few known plaintext/cipher
 """
     params = [
         Param("key", "Key matrix", "text", "3 3; 2 5",
-              help="Rows separated by ';' (e.g. '3 3; 2 5'), or a keyword with n² letters (e.g. HILL)",
+              help="Rows separated by ';' (e.g. '3 3; 2 5'; negative entries are fine, taken mod 26), "
+                   "or a keyword with n² letters (e.g. HILL)",
               random=_random_key),
         Param("convention", "Convention", "choice", ROW, choices=[ROW, COL]),
         Param("filler", "Padding letter", "text", "X"),
