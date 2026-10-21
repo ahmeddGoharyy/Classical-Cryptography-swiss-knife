@@ -9,7 +9,8 @@ This document lists every algorithm built into **Classical Cryptography Swiss Kn
 | Letter numbering | A = 0, B = 1, …, Z = 25 |
 | Arithmetic | mod 26 |
 | Default output | Ciphertext in UPPERCASE, plaintext in lowercase, letters only (lecture style) |
-| Keep format option | On by default. Spaces and punctuation stay at their original positions for every cipher. Substitution ciphers (Caesar, Monoalphabetic, Vigenère family) also keep each letter's case; ciphers that move letters or add padding (Playfair, Hill, transpositions) use UPPERCASE ciphertext / lowercase plaintext and put padding letters after the last letter. |
+| Keep format option | On by default. Spaces and punctuation stay at their original positions for every cipher. Substitution ciphers (Caesar, Monoalphabetic, Polyalphabetic, Vigenère family) also keep each letter's case; ciphers that move letters or add padding (Digraph, Playfair, Hill, transpositions) use UPPERCASE ciphertext / lowercase plaintext and put padding letters after the last letter. |
+| Homophonic keep format | Punctuation that is also one of the key's cipher symbols (e.g. `?`, `-`) is left out of the ciphertext, so it can't be mistaken for a letter. |
 | "English likeness" | A 0–100 % score built from English quadgram (4-letter) statistics. The crackers use it to rank candidates. |
 
 ## Overview
@@ -18,13 +19,16 @@ This document lists every algorithm built into **Classical Cryptography Swiss Kn
 |---|---|---|---|---|---|
 | 1 | Caesar | Monoalphabetic substitution | shift k (any integer, e.g. −3; used mod 26) | 25 | Brute force over all 26 shifts |
 | 2 | Monoalphabetic | Monoalphabetic substitution | permutation of the alphabet, or a keyword | 26! ≈ 4 × 10²⁶ | Frequency analysis, then hill climbing, plus a manual solver |
-| 3 | Vigenère (repeating key) | Polyalphabetic substitution | keyword | 26^m | Kasiski + index of coincidence, then a Caesar per column |
-| 4 | Vigenère (autokey) | Polyalphabetic substitution | keyword (followed by the plaintext) | 26^m | Per-column chi² for each keyword length |
-| 5 | One-time pad | Polyalphabetic substitution | random pad ≥ message length | 26^n | Not breakable; shows the pad for any guessed plaintext |
-| 6 | Playfair | Polygraphic substitution | keyword → 5×5 square | 25! ≈ 1.5 × 10²⁵ | Simulated annealing over key squares |
-| 7 | Hill | Polygraphic substitution | invertible n×n matrix mod 26 | ≈ 26^(n²) | Known-plaintext K = P⁻¹·C, or a ciphertext-only column search (n = 2, 3) |
-| 8 | Columnar transposition | Transposition | column order (numbers or keyword) | L! | Exhaustive search over orders (L ≤ 8), hill climbing beyond |
-| 9 | Rail fence | Transposition | number of rails | n − 1 | Brute force over the rail count |
+| 3 | Homophonic | Monoalphabetic substitution | several symbols per letter (`a=D-? b=Q2T …`) | far more than 26! | Simulated annealing with quadgrams + chi² penalty |
+| 4 | Polyalphabetic (several alphabets) | Polyalphabetic substitution | m cipher alphabets used in turn | (26!)ᵐ | Periodic IoC, then simulated annealing per column |
+| 5 | Vigenère (repeating key) | Polyalphabetic substitution | keyword | 26^m | Kasiski + index of coincidence, then a Caesar per column |
+| 6 | Vigenère (autokey) | Polyalphabetic substitution | keyword (followed by the plaintext) | 26^m | Per-column chi² for each keyword length |
+| 7 | One-time pad | Polyalphabetic substitution | random pad ≥ message length | 26^n | Not breakable; shows the pad for any guessed plaintext |
+| 8 | Digraph (higher order) | Polygraphic substitution | 676-pair table: fixed pairs + keyword | 676! | None (needs thousands of letters) |
+| 9 | Playfair | Polygraphic substitution | keyword → 5×5 square | 25! ≈ 1.5 × 10²⁵ | Simulated annealing over key squares |
+| 10 | Hill | Polygraphic substitution | invertible n×n matrix mod 26 | ≈ 26^(n²) | Known-plaintext K = P⁻¹·C, or a ciphertext-only column search (n = 2, 3) |
+| 11 | Columnar transposition | Transposition | column order (numbers or keyword) | L! | Exhaustive search over orders (L ≤ 8), hill climbing beyond |
+| 12 | Rail fence | Transposition | number of rails | n − 1 | Brute force over the rail count |
 | — | Frequency analysis tool | Analysis | — | — | Letter %, IoC, chi², n-grams, Caesar overlay, periodic IoC |
 
 ---
@@ -84,7 +88,7 @@ cipher: D Q E P R S F T A W X U G O B V H N C M I Z L Y J K
 
 > **Note:** the lecture key was reconstructed from the slides, using the slide examples and the homophone table (a→D, b→Q, c→E). The mapping d→P was inferred because it is the only letter left. If your slide shows a different letter, change it in the app's key box.
 
-**Weakness:** the key space is enormous (26!), but substitution **does not change relative letter frequencies**.
+**Weakness:** the key space is enormous (26!), but substitution **does not change relative letter frequencies**. The lecture lists three ways to make it stronger, and all three are in the app: **homophones** (section 3), **several alphabets** (section 4, with Vigenère as the best-known case) and **higher-order substitution** (section 8).
 
 **Visualizer:** the 26-column substitution table with the current letter highlighted. Keyword letters are marked, and the P.T/C.T rows fill in step by step.
 
@@ -97,7 +101,83 @@ Works reliably on about 100 or more letters of ciphertext.
 
 ---
 
-## 3. Vigenère cipher (repeating key)
+## 3. Homophonic substitution
+
+**Idea:** a monoalphabetic cipher hardened with **homophones**. Each plain letter has several cipher symbols (letters, digits or punctuation), and every time the letter appears one of its symbols is used. Frequent letters get more symbols, so all symbols end up about equally common and single-letter frequency analysis fails.
+
+**Key input:** one `letter=symbols` entry per letter, separated by spaces. Each symbol may belong to one letter only, so decryption is unique.
+
+**Lecture table** (the app's default key extends it to all 26 letters):
+
+| plain | cipher symbols |
+|---|---|
+| a | D , - , ? |
+| b | Q , 2 , T |
+| c | E , 7 , & |
+
+The other letters start with the lecture's monoalphabetic key (d→P, e→R, …). The exception is h, because T already belongs to b. Frequent letters get extra digits and punctuation:
+
+```
+a=D-? b=Q2T c=E7& d=P e=R01# f=S g=F h=+= i=A6! j=W k=X l=U: m=G n=O8% o=B5@ p=V q=H
+r=N/ s=C9* t=M34 u=I v=Z w=L x=Y y=J z=K
+```
+
+**Choosing a symbol**
+- **In turn** (default): the 1st a uses the 1st symbol, the 2nd a the 2nd, and so on, wrapping around.
+- **At random:** any of the letter's symbols. The choice is seeded by the text and key, so the same input always gives the same ciphertext.
+
+**Encrypt:** find the plain letter's column in the key table and take the chosen symbol.
+**Decrypt:** find the symbol in the table and read the plain letter at the top of its column.
+
+| Plaintext | Ciphertext | Source |
+|---|---|---|
+| aaa bbb ccc | D-?Q2TE7& | Lecture 1 table |
+| the cab is ready | M+REDQACN0-PJ | default key |
+
+**Keep format:** spaces and line breaks are kept. Punctuation is kept unless it is one of the key's cipher symbols (like `?` or `-`). Such punctuation is left out of the ciphertext so it can't be mistaken for a letter.
+
+**Visualizer:** the key table, with one column per plain letter and that letter's symbols below it. Each step highlights the letter's column and the homophone used ("symbol 2 of 3"). The last step compares the most common plain letter with the most common cipher symbol to show the flattening.
+
+**Cracking (simulated annealing):** give every symbol a random plain letter, then keep changing one symbol's letter. The score is English quadgrams minus a chi² penalty for letter counts far from English. Without the penalty, the search drifts to texts like "STESETESE…". Each run ends with a greedy pass, and the search stops when two runs agree on an English-looking key. Works on about 250+ symbols; a few rare symbols may still come out wrong and can be fixed in the key box.
+
+---
+
+## 4. Polyalphabetic substitution (several alphabets)
+
+**Idea:** use **several cipher alphabets in turn**. Letter 1 of the message uses alphabet 1, letter 2 uses alphabet 2, and so on, wrapping around. The same plain letter turns into different cipher letters. This is the general form of Vigenère, where every alphabet is a shifted alphabet.
+
+**Key input:** cipher alphabets separated by spaces. Each one is a 26-letter permutation or a keyword (like the Monoalphabetic key).
+
+**Lecture alphabets** (the app's default key is `DQEPRSFTAWXUGOBVHNCMIZLYJK OLV`):
+
+| plain | alphabet 1 | alphabet 2 |
+|---|---|---|
+| a | D | O |
+| b | Q | L |
+| c | E | V |
+
+**Encrypt:** `Cᵢ = alphabet[i mod m][Pᵢ]`
+**Decrypt:** find `Cᵢ` in alphabet `i mod m` and take the plain letter above it.
+
+| Plaintext | Ciphertext | Source |
+|---|---|---|
+| aa bb cc | DOQLEV | Lecture 1 table |
+| meet me at the usual place | GBRSGBDSMERTCTDIVIDVR | default key |
+
+**Key space:** (26!)ᵐ for m alphabets.
+
+**Visualizer:** the m alphabets as stacked substitution tables, plus an "Alphabet" row under the plaintext (1, 2, 1, 2, …). Each step points at the alphabet in use, then at the plain → cipher column. The last step points out a letter that was encrypted two different ways.
+
+**Cracking**
+1. **Index of coincidence** of every m-th letter. With the right m, each column uses one alphabet and has English IoC (≈ 0.067). Multiples of m score high too, so the shortest few good lengths are tried.
+2. **Per-column frequency analysis** gives a first key. Then **simulated annealing** swaps two letters in one column's alphabet, scored with English quadgrams over the whole text, followed by a greedy pass. The search stops when two runs agree.
+3. More alphabets can always fit the text a little better, so **fewer alphabets win** when the fit is about as good.
+
+Works on about 150+ letters per alphabet.
+
+---
+
+## 5. Vigenère cipher (repeating key)
 
 **Idea:** a polyalphabetic cipher. The keyword is repeated until it matches the plaintext length, and each letter is shifted by its key letter using the **Vigenère tableau**. Row = key letter, column = plain letter, cell = cipher letter.
 
@@ -127,7 +207,7 @@ Stallings: `wearediscoveredsaveyourself` with key `deceptive` gives `ZICVTWQNGRZ
 
 ---
 
-## 4. Vigenère cipher (autokey)
+## 6. Vigenère cipher (autokey)
 
 **Idea:** the key stream is the **keyword followed by the plaintext itself**, so the key never repeats.
 
@@ -150,7 +230,7 @@ The Section 1 exercise, decrypting `zadgyaeqrn` with key `easy`, gives **validat
 
 ---
 
-## 5. One-time pad
+## 7. One-time pad
 
 **Idea:** Vigenère with a **truly random key that is as long as the message** and is **never reused**. The key stream is the pad itself.
 
@@ -166,7 +246,43 @@ The Section 1 exercise, decrypting `zadgyaeqrn` with key `easy`, gives **validat
 
 ---
 
-## 6. Playfair cipher
+## 8. Digraph substitution (higher order)
+
+**Idea:** **higher-order substitution** replaces **blocks** of letters instead of single letters, which makes it a simple **block cipher**. With blocks of two letters (digrams), the key is a table of all 26 × 26 = 676 pairs.
+
+**Lecture table:**
+
+| plain | cipher |
+|---|---|
+| aa | DS |
+| ab | CG |
+| ac | HH |
+| … | … |
+
+**Key input** (nobody types 676 pairs):
+- **Fixed pairs:** your own entries, e.g. `AA=DS AB=CG AC=HH` (default: the lecture's rows).
+- **Keyword:** shuffles the remaining cipher pairs onto the remaining plain pairs. The same keyword always gives the same table.
+- **Filler letter:** completes an odd last pair (default X).
+
+The table is a permutation of the 676 pairs, so decryption is unique.
+
+**Encrypt:** split into pairs; for each pair, row = 1st letter, column = 2nd letter, and the cell is the cipher pair.
+**Decrypt:** find the cipher pair in the table and read its row and column headers.
+
+| Plaintext | Ciphertext | Source |
+|---|---|---|
+| aa ab ac | DSCGHH | Lecture 1 table |
+| attack at dawn | YFUATFYFAFDM | default key (keyword LECTURE) |
+
+**Key space:** 676!. Single-letter frequencies are hidden, but every pair is always encrypted the same way, so **pair frequencies** (TH, HE, IN…) still leak.
+
+**Visualizer:** the text split into pairs, then the full 26 × 26 table (fixed pairs in amber). For each pair the row and column light up and meet at the cipher pair.
+
+**Cracking:** no automatic cracker. A 676-entry key needs digram frequency analysis on thousands of letters. Playfair and Hill are digraph ciphers with much smaller keys, so they can be cracked.
+
+---
+
+## 9. Playfair cipher
 
 **Idea:** encrypt **pairs of letters** (digrams) using a 5×5 key square.
 
@@ -212,7 +328,7 @@ U V W X Z
 
 ---
 
-## 7. Hill cipher
+## 10. Hill cipher
 
 **Idea:** split the text into blocks of *n* letters and multiply each block by an invertible n×n key matrix **K** mod 26.
 
@@ -253,7 +369,7 @@ U V W X Z
 
 ---
 
-## 8. Columnar transposition
+## 11. Columnar transposition
 
 **Idea:** letters are rearranged, not replaced. Write the plaintext row by row under the key, then read the **columns** top to bottom in key order.
 
@@ -283,7 +399,7 @@ U V W X Z
 
 ---
 
-## 9. Rail fence cipher
+## 12. Rail fence cipher
 
 **Idea:** write the plaintext in a **zigzag** over *k* rails, then read rail by rail.
 
@@ -332,8 +448,9 @@ A standalone page (Tools → Frequency analysis) for any text:
 |---|---|
 | IoC ≈ 0.066 and letter frequencies match English | Transposition |
 | IoC ≈ 0.066 but the frequency shape is relabelled | Monoalphabetic substitution (Caesar, keyword…) |
-| IoC well below 0.06 (flat distribution) | Polyalphabetic (Vigenère) or a one-time pad |
-| In between | Polygraphic (Playfair / Hill) or a Vigenère with a short key |
+| More than 26 different symbols (digits, punctuation) with flat frequencies | Homophonic substitution |
+| IoC well below 0.06 (flat distribution) | Polyalphabetic (several alphabets, Vigenère) or a one-time pad |
+| In between | Polygraphic (Digraph / Playfair / Hill) or a Vigenère with a short key |
 
 ---
 
@@ -343,6 +460,7 @@ A standalone page (Tools → Frequency analysis) for any text:
 2. Subclass `Cipher` and decorate the class with `@register`.
 3. Implement `encrypt`, `decrypt` and `trace`. `crack` is optional.
 4. Declare `params` (they become the form fields in the GUI) and `examples`.
+   If the ciphertext can contain characters other than A–Z, override `symbols()` (and `run()` for keep-format rules), as Homophonic does.
 5. Add a known-answer test to `tests/test_ciphers.py`.
 6. Add a section to this document.
 

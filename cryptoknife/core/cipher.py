@@ -106,8 +106,12 @@ class Cipher:
     def crack(self, letters: str, ctx: CrackContext, **params) -> CrackResult:
         raise CipherError("No automatic cracker for this cipher.")
 
+    def symbols(self, text: str, mode: str) -> str:
+        """The characters this cipher reads from the input (default: the letters A-Z, uppercased)."""
+        return clean(text)
+
     def run(self, text: str, mode: str, params: dict, keep_format: bool = False) -> str:
-        letters = clean(text)
+        letters = self.symbols(text, mode)
         if not letters:
             return ""
         p = {**self.defaults(), **params}

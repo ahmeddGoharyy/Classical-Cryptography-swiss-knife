@@ -477,7 +477,7 @@ class VisualizeTab(QWidget):
         text = self.input.toPlainText()
         for lbl in (self.error, self.notes, self.status):
             lbl.clear()
-        letters = clean(text)
+        letters = self.cipher.symbols(text, mode)
         if not letters:
             self._fail("Enter some text first — it needs at least one letter A–Z.", [self.input])
             return
@@ -576,7 +576,7 @@ class VisualizeTab(QWidget):
         self._revealed = True
         self.loading.stop()
         self.output.setPlainText(self._pending)
-        n = len(clean(self._pending))
+        n = len(self.cipher.symbols(self._pending, "decrypt" if self.mode == "encrypt" else "encrypt"))
         self.status.setText(f"✔  {'Encrypted' if self.mode == 'encrypt' else 'Decrypted'} — {n} letters.")
 
     def _show_step(self, i: int) -> None:
@@ -805,7 +805,7 @@ class CrackTab(QWidget):
         self.status.setText("Example ciphertext made with a random key — press Crack.")
 
     def start(self) -> None:
-        letters = clean(self.input.toPlainText())
+        letters = self.cipher.symbols(self.input.toPlainText(), "decrypt")
         self.error.clear()
         if not letters:
             self.error.setText("⚠  Enter some ciphertext first.")

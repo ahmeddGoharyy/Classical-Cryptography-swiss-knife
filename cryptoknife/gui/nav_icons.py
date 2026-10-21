@@ -15,6 +15,16 @@ ICONS = {
     # substitution table: two rows linked by arrows
     "monoalphabetic": f'<path d="M4 6h16M4 18h16" {_S}/><path d="M7 9v6M12 9v6M17 9v6" {_S}/>'
                       f'<path d="M5.5 13.5L7 15l1.5-1.5M10.5 13.5L12 15l1.5-1.5M15.5 13.5L17 15l1.5-1.5" {_S}/>',
+    # one letter fanning out to three symbols
+    "homophonic": f'<circle cx="6" cy="12" r="2.3" {_S}/><path d="M8.3 11.2L16 6M8.5 12H16M8.3 12.8L16 18" {_S}/>'
+                  f'<circle cx="18" cy="6" r="1.3" fill="{{c}}"/><circle cx="18" cy="12" r="1.3" fill="{{c}}"/>'
+                  f'<circle cx="18" cy="18" r="1.3" fill="{{c}}"/>',
+    # plain row over two cipher alphabets
+    "polyalphabetic": f'<path d="M4 5h16M4 12h16M4 19h16" {_S}/><path d="M8 7v3M16 14v3" {_S}/>',
+    # a pair of cells becoming another pair
+    "digraph": f'<rect x="4" y="3.5" width="7" height="6" rx="1.2" {_S}/><rect x="13" y="3.5" width="7" height="6" rx="1.2" {_S}/>'
+               f'<path d="M12 11.5v4.5M10 14l2 2 2-2" {_S}/>'
+               f'<rect x="4" y="17" width="16" height="4" rx="1.2" fill="{{c}}" fill-opacity="0.35" stroke="none"/>',
     # tableau: grid
     "vigenere": f'<rect x="4" y="4" width="16" height="16" rx="2" {_S}/><path d="M4 9.3h16M4 14.6h16M9.3 4v16M14.6 4v16" {_S}/>',
     # key feeding itself: key + loop

@@ -35,6 +35,13 @@ def run(cid, text, mode="encrypt", keep=False, **params):
     ("columnar", "wearediscoveredfleeatonce", "encrypt", {"key": "ZEBRAS", "pad": False},
      "EVLNACDTESEAROFODEECWIREE"),
     ("railfence", "wearediscoveredfleeatonce", "encrypt", {"rails": 3}, "WECRLTEERDSOEEFEAOCAIVDEN"),
+    # Lecture 1, "To increase the immunity of monoalphabetic cipher"
+    ("homophonic", "aaa bbb ccc", "encrypt", {}, "D-?Q2TE7&"),       # a=D,-,? b=Q,2,T c=E,7,&
+    ("homophonic", "D-?Q2TE7&", "decrypt", {}, "aaabbbccc"),
+    ("polyalphabetic", "aa bb cc", "encrypt", {}, "DOQLEV"),         # a→D,O b→Q,L c→E,V
+    ("polyalphabetic", "DOQLEV", "decrypt", {}, "aabbcc"),
+    ("digraph", "aa ab ac", "encrypt", {}, "DSCGHH"),                # aa→DS ab→CG ac→HH
+    ("digraph", "DSCGHH", "decrypt", {}, "aaabac"),
 ])
 def test_known_answers(cid, text, mode, params, expected):
     assert run(cid, text, mode, **params) == expected
@@ -84,6 +91,42 @@ def test_keep_format():
     assert pf.count(",") == 1 and pf.index(",") == 5 and pf.replace(",", "").replace(" ", "") == run("playfair", "Hello world")
 
 
+
+def test_homophonic_key_and_choices():
+    h = get_cipher("homophonic")
+    with pytest.raises(CipherError):
+        run("homophonic", "ab", key="a=DQ b=Q")  # Q stands for two letters
+    with pytest.raises(CipherError):
+        run("homophonic", "abz", key="a=D b=Q")  # no symbols for z
+    random_choice = run("homophonic", "attack at dawn", pick="At random")
+    assert random_choice == run("homophonic", "attack at dawn", pick="At random")  # reproducible
+    assert run("homophonic", random_choice, "decrypt") == "attackatdawn"
+    # keep format: spaces and ordinary punctuation stay; punctuation that is a cipher symbol (? and !) is dropped
+    ct = run("homophonic", "Hello, world? yes!", keep=True)
+    assert ct.count(" ") == 2 and ct.count(",") == 1 and "?" not in ct[-4:]
+    assert run("homophonic", ct, "decrypt", keep=True) == "hello, world yes"
+    assert h.trace(h.symbols(ct, "decrypt"), "decrypt").result == "HELLOWORLDYES"
+
+
+def test_polyalphabetic_generalizes_mono_and_vigenere():
+    text = "WEAREDISCOVEREDSAVEYOURSELF"
+    assert run("polyalphabetic", text, key=LECTURE_KEY) == run("monoalphabetic", text, key=LECTURE_KEY)
+    shifted = " ".join("ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i:] + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[:i] for i in (3, 4, 2))
+    assert run("polyalphabetic", text, key=shifted) == run("vigenere", text, key="DEC")
+
+
+def test_digraph_table_is_a_permutation():
+    from cryptoknife.core.ciphers.digraph import PAIRS, build_table
+    table = build_table("AA=DS AB=CG AC=HH", "LECTURE")
+    assert sorted(table) == PAIRS and sorted(table.values()) == PAIRS
+    assert build_table("", "LECTURE") != build_table("", "OTHER")
+    assert run("digraph", "attack at dawn", keep=True).count(" ") == 2
+    with pytest.raises(CipherError):
+        run("digraph", "ab", fixed="AA=DS AB=DS")  # DS used twice
+    with pytest.raises(CipherError):
+        run("digraph", "ABC", "decrypt")  # odd ciphertext
+
+
 LETTER = ("Cdzq Rstcdmsr, Sghr vddj gzr addm z khsskd cheedqdms eqnl zkk sgd nsgdqr xnt'ud dwodqhdmbdc adenqd. "
           "Hs gzr addm xntq kzrs ehqrs vddj ne tmhudqrhsx")
 SAMPLE = ("It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of "
@@ -122,6 +165,17 @@ def test_crack_mono_columnar_rail_hill():
     ct = hill.encrypt(pt, key="5 17; 8 3")
     assert crack("hill", ct, size=2).candidates[0].key == "5 17; 8 3"
     assert crack("hill", ct, size=2, known="itwasthe").candidates[0].key == "5 17; 8 3"
+
+
+def test_crack_polyalphabetic_and_homophonic():
+    from cryptoknife.core.text import clean
+    pt = clean(SAMPLE)
+    ct = get_cipher("polyalphabetic").encrypt(pt, key="ZEBRAS QUICK")
+    best = crack("polyalphabetic", ct).candidates[0]
+    assert len(best.key.split()) == 2 and sum(a == b for a, b in zip(best.plaintext, pt)) > 0.9 * len(pt)
+    ct = get_cipher("homophonic").encrypt(pt)
+    best = crack("homophonic", ct, seconds=60).candidates[0]
+    assert sum(a == b for a, b in zip(best.plaintext, pt)) > 0.9 * len(pt)
 
 
 @pytest.mark.parametrize("cipher", all_ciphers(), ids=lambda c: c.id)

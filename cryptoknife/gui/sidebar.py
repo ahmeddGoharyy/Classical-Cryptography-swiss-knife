@@ -28,6 +28,9 @@ FAMILY_COLORS = {
 }
 # id -> (title, subtitle) shown in the menu
 DISPLAY = {"caesar": ("Caesar", "shift cipher"), "monoalphabetic": ("Monoalphabetic", "substitution table"),
+           "homophonic": ("Homophonic", "several symbols per letter"),
+           "polyalphabetic": ("Polyalphabetic", "several alphabets in turn"),
+           "digraph": ("Digraph", "higher-order pair table"),
            "vigenere": ("Vigenère", "repeating key"), "autokey": ("Autokey", "Vigenère variant"),
            "otp": ("One-time pad", "perfect secrecy"), "playfair": ("Playfair", "5×5 key square"),
            "hill": ("Hill", "matrix cipher"), "columnar": ("Columnar", "transposition table"),
