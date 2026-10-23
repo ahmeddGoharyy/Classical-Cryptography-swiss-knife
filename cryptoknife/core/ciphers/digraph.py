@@ -113,6 +113,17 @@ The table is a permutation: every cipher pair is used exactly once, so decryptio
 ## Security
 Single-letter frequencies are hidden, but each pair is always encrypted the same way, so **pair frequencies** (TH, HE, IN…) still leak. That needs much more ciphertext than letter frequency analysis. Playfair and Hill are digraph ciphers too, with keys small enough to remember.
 """
+    key_help = """## Key shape
+A **table of all 676 letter pairs**, each mapped to a different pair. In the app: a few **fixed pairs** (`AA=DS`) plus a **keyword** that shuffles all the others.
+
+## Key space
+**676!** tables in theory (a number with 1,600+ digits). With the app's keyword, only as many as there are keywords.
+
+## Weaknesses
+- A pair always encrypts the same way, so **pair frequencies** (TH, HE, IN…) leak.
+- Breaking it needs thousands of letters, but a 676-entry table is impractical to memorize or share.
+- An odd-length text needs a filler letter.
+"""
     params = [
         Param("fixed", "Fixed pairs", "text", DEFAULT_FIXED,
               help="Plain pair = cipher pair entries, e.g. AA=DS AB=CG; every other pair comes from the keyword"),

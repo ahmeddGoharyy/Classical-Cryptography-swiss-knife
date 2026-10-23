@@ -97,14 +97,14 @@ def test_typing_while_animating_then_running_again(win, cipher):
 
 
 def test_failed_second_run_stops_the_first(win):
-    v = visual(win, "otp")
+    v = visual(win, "vigenere")
     v._load_example(1)
     v.run("encrypt")
     pump(0.05)
-    v.input.setPlainText("this text is longer than the pad")
+    v.form.widgets["key"].setText("123")  # no letters: the second run must fail
     v.enc_btn.click()
     pump(0.05)
-    assert "at least as long" in v.error.text()
+    assert "at least one letter" in v.error.text()
     assert not v.loading.isVisible() and not v.player.timer.isActive()
     assert v.form.widgets["key"].property("invalid")
     QTest.keyClicks(v.form.widgets["key"], "A")

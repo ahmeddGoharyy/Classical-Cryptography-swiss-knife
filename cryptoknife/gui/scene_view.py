@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, Qt, QVariantAnimation, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPolygonF
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from ..core.text import ALPHABET
@@ -19,7 +19,7 @@ from .theme import theme
 
 MARGIN, ROW_GAP, PANEL_GAP, BEND_ROOM, STACK_GAP = 22, 46, 46, 70, 40
 WHEEL_R, WHEEL_CELL, WHEEL_GAP = 124, 21, 34
-KIND_COLOR = {"flow": "accent", "result": "button", "key": "#f5b84b", "muted": "muted"}
+KIND_COLOR = {"flow": "accent", "result": "result", "key": "#f5b84b", "muted": "muted"}
 
 
 def _smooth(x: float) -> float:
@@ -40,13 +40,21 @@ class SceneView(QWidget):
         self._texts: dict[str, str] = {}
         self._t = 1.0
         self._emit_focus = False
+        # Grids and labels only change at a few moments of an animation (a new step, or a revealed cell), so they
+        # are painted once into this pixmap; each animation frame just draws it and the moving arrows on top.
+        self._version = 0
+        self._layer: QPixmap | None = None
+        self._layer_key: tuple | None = None
+        self._layer_focus = None
+        self._advance: dict[tuple, dict[str, float]] = {}  # text widths per font: cells repeat the same letters
+        self._natural: dict[int, tuple[Step, tuple[float, float]]] = {}  # step sizes at zoom 1, by step identity
         self._anim = QVariantAnimation(self)
         self._anim.setStartValue(0.0)
         self._anim.setEndValue(1.0)
         self._anim.setEasingCurve(QEasingCurve.Linear)
         self._anim.valueChanged.connect(self._tick)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        theme().changed.connect(self.update)
+        theme().changed.connect(self._invalidate)
 
     # ---- public API ---------------------------------------------------------------------------
     def set_step(self, step: Step | None, animate: bool = False, duration: int = 1200) -> None:
@@ -69,15 +77,18 @@ class SceneView(QWidget):
     def natural_sizes(self, steps: list[Step]) -> list[tuple[float, float]]:
         """Sizes of several steps at zoom 1, restoring the current view only once at the end."""
         saved = (self.step, self.zoom, self._items, self._rects, self._texts)
-        sizes = []
-        self.zoom = 1.0
-        for step in steps:
-            self.step = step
+        if len(self._natural) > 5000:
+            self._natural.clear()
+        todo = [st for st in steps if self._natural.get(id(st), (None,))[0] is not st]
+        if todo:
+            self.zoom = 1.0
+            for step in todo:
+                self.step = step
+                self._relayout()
+                self._natural[id(step)] = (step, (self.minimumWidth(), self.minimumHeight()))
+            self.step, self.zoom, self._items, self._rects, self._texts = saved
             self._relayout()
-            sizes.append((self.minimumWidth(), self.minimumHeight()))
-        self.step, self.zoom, self._items, self._rects, self._texts = saved
-        self._relayout()
-        return sizes
+        return [self._natural[id(st)][1] for st in steps]
 
     @staticmethod
     def _has_animation(step: Step) -> bool:
@@ -114,9 +125,16 @@ class SceneView(QWidget):
         cmin, ch = (20 * z, 20 * z) if g.compact else (36 * z, 36 * z)
         gap = 2 * z if g.compact else 5 * z
         colw = [cmin] * ncols
+        adv = self._advance.setdefault((g.compact, z), {})
+        pad = (6 if g.compact else 14) * z
         for r in g.cells:
             for j, c in enumerate(r):
-                colw[j] = max(colw[j], fm.horizontalAdvance(c.text) + (6 if g.compact else 14) * z)
+                t = c.text
+                a = adv.get(t)
+                if a is None:
+                    a = adv[t] = fm.horizontalAdvance(t)
+                if a + pad > colw[j]:
+                    colw[j] = a + pad
         lab_font = self._font(9.5, mono=False)
         label_w = 0.0
         if g.row_labels:
@@ -146,7 +164,14 @@ class SceneView(QWidget):
         fm = QFontMetrics(font)
         return fm.horizontalAdvance(p.text) + 8, fm.height() + 4, {"font": font}
 
+    def _invalidate(self) -> None:
+        self._version += 1
+        self._advance.clear()
+        self._natural.clear()
+        self.update()
+
     def _relayout(self) -> None:
+        self._version += 1
         self._items, self._rects, self._texts = [], {}, {}
         if not self.step:
             self.setMinimumSize(0, 0)
@@ -296,11 +321,35 @@ class SceneView(QWidget):
                         "Enter a text and a key, then press Encrypt or Decrypt to watch the process step by step.")
             return
         progress = self._arrow_progress()
-        pending = {a.dst for a, p in progress if a.reveal and p < 1.0}
+        pending = frozenset(a.dst for a, p in progress if a.reveal and p < 1.0)
+        dpr = self.devicePixelRatioF()
+        key = (self._version, pending, self.width(), self.height(), dpr)
+        if key != self._layer_key or self._layer is None:
+            self._layer_key = key
+            self._layer, self._layer_focus = self._paint_layer(ui, pending, dpr)
+        qp.drawPixmap(0, 0, self._layer)
+        focus = self._layer_focus
+        for p, x, y, w, h, m in self._items:
+            if isinstance(p, Wheel):  # wheels rotate during the animation: always drawn live
+                self._draw_wheel(qp, p, x, y, m, ui, pending)
+        for a, prog in progress:
+            if prog > 0:
+                self._draw_arrow(qp, a, prog, ui)
+        qp.end()
+        if focus and self._emit_focus:
+            self._emit_focus = False
+            self.focusChanged.emit(focus[0])
+
+    def _paint_layer(self, ui: dict, pending: frozenset, dpr: float):
+        """Paint the static grids and labels into a pixmap; return it and the cell to focus."""
+        pm = QPixmap(max(1, int(self.width() * dpr)), max(1, int(self.height() * dpr)))
+        pm.setDevicePixelRatio(dpr)
+        pm.fill(QColor(ui["scene"]))
+        qp = QPainter(pm)
+        qp.setRenderHint(QPainter.Antialiasing)
         focus = None
         for p, x, y, w, h, m in self._items:
             if isinstance(p, Wheel):
-                self._draw_wheel(qp, p, x, y, m, ui, pending)
                 continue
             if isinstance(p, Label):
                 if p.id and p.id in pending:
@@ -312,13 +361,8 @@ class SceneView(QWidget):
                 f = self._draw_grid(qp, p, x, y, m, ui, pending)
                 if f is not None and (focus is None or not p.compact and focus[1]):
                     focus = (f, p.compact)
-        for a, prog in progress:
-            if prog > 0:
-                self._draw_arrow(qp, a, prog, ui)
         qp.end()
-        if focus and self._emit_focus:
-            self._emit_focus = False
-            self.focusChanged.emit(focus[0])
+        return pm, focus
 
     def _color(self, kind: str, ui: dict) -> QColor:
         key = KIND_COLOR.get(kind, "accent")
@@ -348,6 +392,14 @@ class SceneView(QWidget):
                 p1 = QPointF(D.left() - 3 if dx > 0 else D.right() + 3, dc.y())
             path.moveTo(p0)
             path.lineTo(p1)
+            return path, False
+        if curve == "side":  # leave and enter horizontally: wiring between columns placed side by side
+            right = dx > 0
+            p0 = QPointF(S.right() + 2 if right else S.left() - 2, sc.y())
+            p1 = QPointF(D.left() - 3 if right else D.right() + 3, dc.y())
+            span = p1.x() - p0.x()
+            path.moveTo(p0)
+            path.cubicTo(QPointF(p0.x() + span * 0.5, p0.y()), QPointF(p1.x() - span * 0.5, p1.y()), p1)
             return path, False
         if abs(dy) >= max(S.height(), D.height()) * 0.75:
             down = dy > 0

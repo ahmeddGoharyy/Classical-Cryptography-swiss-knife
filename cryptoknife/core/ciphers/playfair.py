@@ -133,6 +133,17 @@ All moves wrap around the square.
 ## Example
 `balloon` → BA LX LO ON → `IBSUPMNA`
 """
+    key_help = """## Key shape
+A **keyword** written into a **5 × 5 square** (duplicates removed, I = J), followed by the rest of the alphabet.
+
+## Key space
+**25! ≈ 1.5 × 10²⁵** squares. Fewer distinct ciphers, because shifting rows or columns cyclically gives the same cipher.
+
+## Weaknesses
+- Reversed pairs give reversed results: if AB → XY, then BA → YX.
+- A pair is never two identical letters, and no letter encrypts to itself.
+- Pair statistics and simulated annealing break about 200+ letters.
+"""
     params = [
         Param("key", "Keyword", "text", "MONARCHY", help="Keyword for the 5×5 square",
               random=lambda n: "".join(random.sample(SQUARE_ALPHABET, 25))),

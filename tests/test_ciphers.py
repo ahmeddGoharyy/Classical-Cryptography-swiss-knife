@@ -22,12 +22,12 @@ def run(cid, text, mode="encrypt", keep=False, **params):
     ("monoalphabetic", "computer", "encrypt", {"key": LECTURE_KEY}, "EBGVIMRN"),
     ("vigenere", "Secrecy", "encrypt", {"key": "easy"}, "WEUPICQ"),
     ("vigenere", "rolferv", "decrypt", {"key": "easy"}, "nothard"),
-    ("autokey", "Secrecy", "encrypt", {"key": "easy"}, "WEUPWGA"),
-    ("autokey", "zadgyaeqrn", "decrypt", {"key": "easy"}, "validation"),
-    ("otp", "Computer", "encrypt", {"key": "hilmotry"}, "JWXBIMVP"),
+    ("vigenere", "Secrecy", "encrypt", {"key": "easy", "variant": "Autokey"}, "WEUPWGA"),
+    ("vigenere", "zadgyaeqrn", "decrypt", {"key": "easy", "variant": "Autokey"}, "validation"),
     # Stallings
     ("vigenere", "wearediscoveredsaveyourself", "encrypt", {"key": "deceptive"}, "ZICVTWQNGRZGVTWAVZHCQYGLMGJ"),
-    ("autokey", "wearediscoveredsaveyourself", "encrypt", {"key": "deceptive"}, "ZICVTWQNGKZEIIGASXSTSLVVWLA"),
+    ("vigenere", "wearediscoveredsaveyourself", "encrypt", {"key": "deceptive", "variant": "Autokey"},
+     "ZICVTWQNGKZEIIGASXSTSLVVWLA"),
     ("hill", "paymoremoney", "encrypt", {"key": "17 17 5; 21 18 21; 2 2 19"}, "RRLMWBKASPDH"),
     ("columnar", "attackpostponeduntiltwoamxyz", "encrypt", {"key": "4 3 1 2 5 6 7"},
      "TTNAAPTMTSUOAODWCOIXKNLYPETZ"),
@@ -35,13 +35,18 @@ def run(cid, text, mode="encrypt", keep=False, **params):
     ("columnar", "wearediscoveredfleeatonce", "encrypt", {"key": "ZEBRAS", "pad": False},
      "EVLNACDTESEAROFODEECWIREE"),
     ("railfence", "wearediscoveredfleeatonce", "encrypt", {"rails": 3}, "WECRLTEERDSOEEFEAOCAIVDEN"),
+    # Lecture: rail fence written column by column (depth = rows), read row by row
+    ("railfence", "Computer Science", "encrypt", {"rails": 2, "pattern": "Columns (top to bottom)"}, "CMUESINEOPTRCEC"),
+    ("railfence", "Computer Science", "encrypt", {"rails": 3, "pattern": "Columns (top to bottom)"}, "CPECNOURICMTSEE"),
+    ("railfence", "CMUESINEOPTRCEC", "decrypt", {"rails": 2, "pattern": "Columns (top to bottom)"}, "computerscience"),
+    ("railfence", "CPECNOURICMTSEE", "decrypt", {"rails": 3, "pattern": "Columns (top to bottom)"}, "computerscience"),
     # Lecture 1, "To increase the immunity of monoalphabetic cipher"
     ("homophonic", "aaa bbb ccc", "encrypt", {}, "D-?Q2TE7&"),       # a=D,-,? b=Q,2,T c=E,7,&
     ("homophonic", "D-?Q2TE7&", "decrypt", {}, "aaabbbccc"),
-    ("polyalphabetic", "aa bb cc", "encrypt", {}, "DOQLEV"),         # a→D,O b→Q,L c→E,V
-    ("polyalphabetic", "DOQLEV", "decrypt", {}, "aabbcc"),
     ("digraph", "aa ab ac", "encrypt", {}, "DSCGHH"),                # aa→DS ab→CG ac→HH
     ("digraph", "DSCGHH", "decrypt", {}, "aaabac"),
+    # Enigma I: standard test vector (rotors I II III, UKW-B, rings AAA, start AAA, no plugs)
+    ("enigma", "AAAAA", "encrypt", {}, "BDZGO"),
 ])
 def test_known_answers(cid, text, mode, params, expected):
     assert run(cid, text, mode, **params) == expected
@@ -68,8 +73,6 @@ def test_hill_column_convention_and_inverse():
 def test_roundtrip_and_trace(cipher):
     text = "THEQUICKBROWNFOXJUMPSOVERTHELAZYDOGTWICEOVER"
     p = cipher.defaults()
-    if cipher.id == "otp":
-        p["key"] = "Q" * len(text)
     ct = cipher.encrypt(text, **p)
     pt = cipher.decrypt(ct, **p)
     if cipher.id == "playfair":
@@ -108,13 +111,6 @@ def test_homophonic_key_and_choices():
     assert h.trace(h.symbols(ct, "decrypt"), "decrypt").result == "HELLOWORLDYES"
 
 
-def test_polyalphabetic_generalizes_mono_and_vigenere():
-    text = "WEAREDISCOVEREDSAVEYOURSELF"
-    assert run("polyalphabetic", text, key=LECTURE_KEY) == run("monoalphabetic", text, key=LECTURE_KEY)
-    shifted = " ".join("ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i:] + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[:i] for i in (3, 4, 2))
-    assert run("polyalphabetic", text, key=shifted) == run("vigenere", text, key="DEC")
-
-
 def test_digraph_table_is_a_permutation():
     from cryptoknife.core.ciphers.digraph import PAIRS, build_table
     table = build_table("AA=DS AB=CG AC=HH", "LECTURE")
@@ -125,6 +121,40 @@ def test_digraph_table_is_a_permutation():
         run("digraph", "ab", fixed="AA=DS AB=DS")  # DS used twice
     with pytest.raises(CipherError):
         run("digraph", "ABC", "decrypt")  # odd ciphertext
+
+
+
+BARBAROSSA = ("EDPUD NRGYS ZRCXN UYTPO MRMBO FKTBZ REZKM LXLVE FGUEY SIOZV EQMIK UBPMM YLKLT TDEIS MDICA GYKUA "
+              "CTCDO MOHWX MUUIA UBSTS LRNBZ SZWNR FXWFY SSXJZ VIJHI DISHP RKLKA YUPAD TXQSP INQMA TLPIF SVKDA "
+              "SCTAC DPBOP VHJK")
+
+
+def test_enigma_operation_barbarossa():
+    # Operation Barbarossa message, 7 July 1941: rotors II IV V, UKW-B, rings 02 21 12, message key BLA
+    p = {"rotors": "II IV V", "reflector": "B", "rings": "02 21 12", "positions": "BLA",
+         "plugboard": "AV BS CG DL FU HZ IN KM OW RX"}
+    pt = run("enigma", BARBAROSSA, "decrypt", **p)
+    assert pt.startswith("aufklxabteilungxvonxkurtinowaxkurtinowaxnordwestlxsebez")
+    assert pt.endswith("angriffxinfxrgtx")
+
+
+def test_enigma_stepping_and_properties():
+    from cryptoknife.core.ciphers.enigma import REFLECTORS, step
+    pos, seen = (0, 3, 20), []  # ADU with rotors I II III: the middle rotor double-steps
+    for _ in range(3):
+        pos, _turned = step(("I", "II", "III"), pos)
+        seen.append("".join(chr(65 + x) for x in pos))
+    assert seen == ["ADV", "AEW", "BFX"]
+    for w in REFLECTORS.values():  # reflectors swap pairs and never map a letter to itself
+        assert all(w[ord(c) - 65] == chr(65 + i) and c != chr(65 + i) for i, c in enumerate(w))
+    p = {"rotors": "VIII VI III", "reflector": "C", "rings": "ZEN", "positions": "QQQ", "plugboard": "AB CD EF"}
+    text = "THEQUICKBROWNFOXJUMPSOVERTHELAZYDOG" * 30
+    ct = get_cipher("enigma").encrypt(text, **p)
+    assert get_cipher("enigma").decrypt(ct, **p) == text  # reciprocal
+    assert all(a != b for a, b in zip(text, ct))  # no letter encrypts to itself
+    for bad in ({"rotors": "I I II"}, {"rotors": "I II IX"}, {"rings": "AB"}, {"plugboard": "AB AC"}):
+        with pytest.raises(CipherError):
+            run("enigma", "test", **bad)
 
 
 LETTER = ("Cdzq Rstcdmsr, Sghr vddj gzr addm z khsskd cheedqdms eqnl zkk sgd nsgdqr xnt'ud dwodqhdmbdc adenqd. "
@@ -149,8 +179,10 @@ def test_crack_lecture_letter():
 def test_crack_vigenere_and_autokey():
     from cryptoknife.core.text import clean
     pt = clean(SAMPLE)
-    assert crack("vigenere", get_cipher("vigenere").encrypt(pt, key="LEMON")).candidates[0].key == "LEMON"
-    assert crack("autokey", get_cipher("autokey").encrypt(pt, key="QUEEN")).candidates[0].key == "QUEEN"
+    v = get_cipher("vigenere")
+    for key, variant in (("LEMON", "Repeating key"), ("QUEEN", "Autokey")):
+        best = crack("vigenere", v.encrypt(pt, key=key, variant=variant)).candidates[0]  # "Try both" by default
+        assert best.key == key and best.params["variant"] == variant
 
 
 def test_crack_mono_columnar_rail_hill():
@@ -160,19 +192,24 @@ def test_crack_mono_columnar_rail_hill():
     assert crack("monoalphabetic", mono.encrypt(pt, key="ZEBRAS"), restarts=4).candidates[0].plaintext == pt
     ct = get_cipher("columnar").encrypt(pt, key="3 1 4 2 6 5", pad=False)
     assert crack("columnar", ct, max_len=7).candidates[0].plaintext == pt
-    assert crack("railfence", get_cipher("railfence").encrypt(pt, rails=5)).candidates[0].key == "5"
+    assert crack("railfence", get_cipher("railfence").encrypt(pt, rails=5)).candidates[0].key == "5 rails, zigzag"
     hill = get_cipher("hill")
     ct = hill.encrypt(pt, key="5 17; 8 3")
     assert crack("hill", ct, size=2).candidates[0].key == "5 17; 8 3"
     assert crack("hill", ct, size=2, known="itwasthe").candidates[0].key == "5 17; 8 3"
 
 
-def test_crack_polyalphabetic_and_homophonic():
+def test_crack_enigma():
     from cryptoknife.core.text import clean
     pt = clean(SAMPLE)
-    ct = get_cipher("polyalphabetic").encrypt(pt, key="ZEBRAS QUICK")
-    best = crack("polyalphabetic", ct).candidates[0]
-    assert len(best.key.split()) == 2 and sum(a == b for a, b in zip(best.plaintext, pt)) > 0.9 * len(pt)
+    p = {"rotors": "III I II", "reflector": "B", "rings": "ADF", "positions": "QEV", "plugboard": "QW ER"}
+    best = crack("enigma", get_cipher("enigma").encrypt(pt, **p), rotor_set="I II III", seconds=60).candidates[0]
+    assert best.plaintext == pt and best.params["rotors"] == "III I II"
+
+
+def test_crack_homophonic():
+    from cryptoknife.core.text import clean
+    pt = clean(SAMPLE)
     ct = get_cipher("homophonic").encrypt(pt)
     best = crack("homophonic", ct, seconds=60).candidates[0]
     assert sum(a == b for a, b in zip(best.plaintext, pt)) > 0.9 * len(pt)
@@ -183,8 +220,6 @@ def test_arrows_point_at_existing_cells(cipher):
     from cryptoknife.core.trace import Grid, Stack, Wheel
     p = cipher.defaults()
     text = "MEETMEATTHEBRIDGEATNOON"
-    if cipher.id == "otp":
-        p["key"] = "Q" * len(text)
     ct = cipher.encrypt(text, **p)
     for mode, src in (("encrypt", text), ("decrypt", ct)):
         steps = cipher.trace(src, mode, **p).steps

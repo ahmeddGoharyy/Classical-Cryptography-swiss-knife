@@ -45,6 +45,17 @@ k = −3 gives exactly the same cipher as k = 23, and k = 29 the same as k = 3.
 ## Security
 Only **25 useful keys**, so it falls to a brute-force attack instantly.
 """
+    key_help = """## Key shape
+One number **k**, the shift. Any integer works mod 26, so −3 is the same key as 23.
+
+## Key space
+26 keys, only **25 useful** (k = 0 changes nothing).
+
+## Weaknesses
+- **Brute force:** trying all 25 shifts takes a moment.
+- Letter frequencies are only shifted: the most common cipher letter is probably E.
+- One known plain/cipher letter pair gives away the whole key.
+"""
     params = [Param("shift", "Shift k", "int", 3, minimum=-99, maximum=99,
                     help="Places to shift; negative = shift left (k = −3 is the same as 23)",
                     random=lambda n: random.randint(1, 25))]

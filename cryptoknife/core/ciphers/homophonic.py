@@ -131,6 +131,16 @@ Spaces and line breaks are kept. Punctuation is kept too, unless it is one of th
 ## Security
 Frequency analysis of single symbols no longer works, but letter **pairs and words** still leak: q is still followed by a u symbol, "the" is still common. Hill climbing with n-gram statistics breaks it on a few hundred symbols.
 """
+    key_help = """## Key shape
+Every plain letter owns a list of **symbols**: `a=D-? b=Q2T …`. Symbols can be letters, digits or punctuation, and each symbol belongs to **one letter only**.
+
+## Key space
+Bigger than 26!: all ways to share the symbols out among the 26 letters (48 symbols in the default key).
+
+## Weaknesses
+- It only hides letter frequencies if frequent letters get **proportionally more symbols**.
+- **Pairs and words still leak** (q is followed by u, "the" is common), so annealing breaks a few hundred symbols.
+"""
     params = [Param("key", "Key", "text", DEFAULT_KEY,
                     help="letter=symbols for each letter, e.g. a=D-? b=Q2T c=E7&", random=_random_key),
               Param("pick", "Choose a symbol", "choice", IN_TURN, [IN_TURN, AT_RANDOM],
@@ -226,7 +236,7 @@ Frequency analysis of single symbols no longer works, but letter **pairs and wor
 
         rule = ("each time a letter appears, the next of its symbols is used (wrapping around)" if pick == IN_TURN
                 else "one of the letter's symbols is picked at random")
-        intro = (f"Every plain letter owns one or more cipher symbols; no symbol is shared.\n"
+        intro = ("Every plain letter owns one or more cipher symbols; no symbol is shared.\n"
                  + (f"Encrypt: find the letter's column and take one of its symbols — {rule}." if enc else
                     "Decrypt: find the symbol in the table and read the plain letter at the top of its column."))
         steps = [Step("The key: several symbols per letter", intro, scene(-1))]

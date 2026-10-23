@@ -122,6 +122,17 @@ K = `[[3 3] [2 5]]`: det = 9, 9⁻¹ ≡ 3 (mod 26), K⁻¹ = `[[15 17] [20 9]]`
 ## Security
 Hides single-letter frequencies, but is **linear**: a few known plaintext/ciphertext blocks reveal the key (K = P⁻¹ · C).
 """
+    key_help = """## Key shape
+An **n × n matrix** of numbers mod 26, e.g. `3 3; 2 5`. It must be **invertible**: gcd(det, 26) = 1.
+
+## Key space
+About 26^(n²) matrices, roughly a third of them invertible: ≈ 1.6 × 10⁵ for 2 × 2.
+
+## Weaknesses
+- **Linear:** n² letters of known plaintext give the key directly (K = P⁻¹·C).
+- Small matrices can be searched column by column from the ciphertext alone.
+- It hides single-letter frequencies, but not the statistics of n-letter blocks.
+"""
     params = [
         Param("key", "Key matrix", "text", "3 3; 2 5",
               help="Rows separated by ';' (e.g. '3 3; 2 5'; negative entries are fine, taken mod 26), "

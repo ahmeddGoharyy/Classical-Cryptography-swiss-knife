@@ -6,11 +6,12 @@ A desktop app (Python + PySide6) to **visualize, solve and crack classical ciphe
 
 Vibe coded by **Ahmed El Gohary**.
 
-- **Ciphers:** Caesar, Monoalphabetic, Homophonic, Polyalphabetic (several alphabets), Vigenère (repeating key / autokey), One-time pad, Digraph (higher-order substitution), Playfair, Hill, Columnar transposition, Rail fence
+- **Ciphers:** Caesar, Monoalphabetic, Homophonic, Polyalphabetic (Vigenère: repeating key or autokey), Digraph (higher-order substitution), Playfair, Hill, Columnar transposition, Rail fence
+- **Rotor machines:** Enigma I / M3 (rotors I–VIII, reflectors A/B/C, ring settings, plugboard, double stepping), with an animated signal path and Gillogly's ciphertext-only attack
 - **Step-by-step animated visualizer** for any plaintext/ciphertext and key (Encrypt / Decrypt buttons, play/pause/step/speed, can be turned off)
 - **“?” help windows** explaining every cipher, key setting, visualization legend and attack
 - **Quick navigation:** top-bar cipher switcher / command palette (**Ctrl+K**), light & dark themes, responsive layout
-- **Crackers:** brute force, frequency analysis with a manual substitution solver, Kasiski + IoC, hill climbing, simulated annealing (Playfair, Homophonic, Polyalphabetic), and the Hill known-plaintext attack
+- **Crackers:** brute force, frequency analysis with a manual substitution solver, Kasiski + IoC, hill climbing, simulated annealing (Playfair, Homophonic), and the Hill known-plaintext attack
 - **Frequency analysis tool:** letter chart vs English, IoC, chi², n-grams, Caesar overlay, periodic IoC
 
 The details of each algorithm are in [Docs/Supported Ciphers](Docs/Supported%20Ciphers/Supported%20Ciphers.md).

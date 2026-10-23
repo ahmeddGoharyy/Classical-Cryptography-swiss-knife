@@ -97,6 +97,16 @@ A **transposition**: letters are rearranged, not replaced. Write the message in 
 ## Tell-tale sign
 Letter frequencies stay **exactly** like English.
 """
+    key_help = """## Key shape
+A **column order**: numbers (`4 3 1 2 5 6 7`), or a **keyword** whose alphabetical order gives the numbers (`ZEBRAS` → 6 3 2 4 1 5).
+
+## Key space
+**L!** orders for L columns, e.g. 40,320 for 8 columns.
+
+## Weaknesses
+- Letters move but never change: **frequencies match English exactly**, which gives away that it is a transposition.
+- Short keys are brute-forced; matching adjacent columns (anagramming) finds longer ones.
+"""
     params = [
         Param("key", "Key", "text", "4 3 1 2 5 6 7",
               help="e.g. 4 3 1 2 5 6 7 or ZEBRAS",

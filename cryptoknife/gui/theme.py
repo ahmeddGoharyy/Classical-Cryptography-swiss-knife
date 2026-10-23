@@ -1,10 +1,10 @@
-"""Modern gray themes (blue accent, green buttons): palette, stylesheet, SVG icons and visualization colors."""
+"""Modern gray themes (blue accent, blue/violet buttons): palette, stylesheet, SVG icons and visualization colors."""
 from __future__ import annotations
 
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QSettings, QSize, Signal
+from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPalette
 from PySide6.QtWidgets import QApplication
 
@@ -15,14 +15,16 @@ UI = {
     "gray": {
         "window": "#26282c", "sidebar": "#1e1f22", "card": "#2e3035", "input": "#25272b", "alt": "#383b41",
         "border": "#3b3e45", "text": "#e8eaed", "muted": "#9aa0a8", "accent": "#4f8cff", "accent_soft": "#2c3b57",
-        "accent_text": "#ffffff", "button": "#16a34a", "button_hover": "#22c55e", "button_text": "#ffffff",
+        "accent_text": "#ffffff", "button": "#4f8cff", "button_hover": "#6b9dff", "button_text": "#ffffff",
+        "button2": "#8b5cf6", "button2_hover": "#a07bff", "result": "#22c55e",
         "good": "#4ade80", "bad": "#f87171", "scene": "#2e3035",
         "series": ["#4f8cff", "#f5b84b", "#22c55e", "#f87171"],
     },
     "light": {
         "window": "#eef0f3", "sidebar": "#e2e5e9", "card": "#ffffff", "input": "#f5f6f8", "alt": "#e7e9ed",
         "border": "#d7dadf", "text": "#1b1d21", "muted": "#5f6670", "accent": "#2563eb", "accent_soft": "#dbe6ff",
-        "accent_text": "#ffffff", "button": "#16a34a", "button_hover": "#15803d", "button_text": "#ffffff",
+        "accent_text": "#ffffff", "button": "#2563eb", "button_hover": "#1d4ed8", "button_text": "#ffffff",
+        "button2": "#7c3aed", "button2_hover": "#6d28d9", "result": "#16a34a",
         "good": "#15803d", "bad": "#dc2626", "scene": "#ffffff",
         "series": ["#2563eb", "#d98b0b", "#16a34a", "#dc2626"],
     },
@@ -178,6 +180,10 @@ class ThemeManager(QObject):
             QPushButton#groupHeader:hover {{ background: {c['alt']}; }}
             QLabel#groupTitle {{ font-weight: 700; font-size: 10.5pt; background: transparent; }}
             QLabel#navTitle {{ font-weight: 500; background: transparent; }}
+            QPushButton#sectionHeader {{ background: transparent; border: none; border-radius: 8px; padding: 0;
+                text-align: left; min-height: 24px; }}
+            QPushButton#sectionHeader:hover {{ background: {c['alt']}; }}
+            QLabel#sectionTitle {{ color: {c['muted']}; font-size: 8pt; font-weight: 700; background: transparent; }}
             QLabel#navSub {{ color: {c['muted']}; font-size: 8.5pt; background: transparent; }}
             QLabel#countPill {{ background: {c['alt']}; color: {c['muted']}; border-radius: 9px; padding: 1px 7px;
                 font-size: 8.5pt; font-weight: 700; min-width: 10px; }}
@@ -260,9 +266,15 @@ class ThemeManager(QObject):
             QPushButton:hover {{ background: {c['button_hover']}; }}
             QPushButton:pressed {{ padding-top: 9px; padding-bottom: 7px; }}
             QPushButton:disabled {{ background: {c['alt']}; color: {c['muted']}; }}
-            QPushButton#big {{ font-size: 11pt; padding: 10px 22px; border-radius: 11px; }}
-            QPushButton#ghost {{ background: transparent; color: {c['button']}; border: 1.5px solid {c['button']}; }}
-            QPushButton#ghost:hover {{ background: {c['button']}; color: white; }}
+            QPushButton#big, QPushButton#decrypt {{ font-size: 11pt; padding: 10px 22px; border-radius: 11px; }}
+            QPushButton#decrypt {{ background: {c['button2']}; }}
+            QPushButton#decrypt:hover {{ background: {c['button2_hover']}; }}
+            QPushButton#decrypt:disabled {{ background: {c['alt']}; color: {c['muted']}; }}
+            /* secondary actions: neutral outline, accent on hover */
+            QPushButton#ghost {{ background: transparent; color: {c['text']}; border: 1px solid {c['border']};
+                font-weight: 500; }}
+            QPushButton#ghost:hover {{ background: {c['alt']}; border-color: {c['accent']}; }}
+            QPushButton#ghost:checked {{ background: {c['accent_soft']}; border-color: {c['accent']}; }}
             QPushButton#ghost:disabled {{ color: {c['muted']}; border-color: {c['border']}; background: transparent; }}
             QPushButton#help {{ background: {c['alt']}; color: {c['text']}; border-radius: 13px; padding: 0;
                 min-width: 26px; max-width: 26px; min-height: 26px; max-height: 26px; font-weight: 700; font-size: 10.5pt; }}
@@ -280,7 +292,7 @@ class ThemeManager(QObject):
             QToolButton#player:hover {{ background: {c['accent_soft']}; }}
             QToolButton#playerMain {{ background: {c['accent']}; border: none; border-radius: 21px; min-width: 42px;
                 min-height: 42px; max-width: 42px; max-height: 42px; }}
-            QToolButton#playerMain:hover {{ background: {c['button']}; }}
+            QToolButton#playerMain:hover {{ background: {c['button_hover']}; }}
             QToolButton#dice {{ background: {c['alt']}; border: none; border-radius: 9px; padding: 5px; }}
             QToolButton#dice:hover {{ background: {c['accent_soft']}; }}
 

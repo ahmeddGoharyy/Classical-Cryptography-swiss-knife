@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections import Counter
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import (QBoxLayout, QComboBox, QGridLayout, QHBoxLayout, QHeaderView, QPushButton, QSlider, QSplitter,
+from PySide6.QtWidgets import (QBoxLayout, QComboBox, QGridLayout, QHBoxLayout, QHeaderView, QPushButton, QSlider,
                                QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from ..core.analysis import (ENGLISH_FREQ, ENGLISH_IOC, RANDOM_IOC, best_caesar_shift, chi_squared, counts,
@@ -41,7 +41,7 @@ all letters. Many classical ciphers leave traces of these statistics in the ciph
 |---|---|
 | IoC ≈ 0.066 and frequencies match English | Transposition (columnar, rail fence) |
 | IoC ≈ 0.066 but the frequency shape is relabelled | Monoalphabetic substitution (Caesar, keyword…) |
-| IoC well below 0.06, flat bars | Polyalphabetic (Vigenère) or one-time pad |
+| IoC well below 0.06, flat bars | Polyalphabetic (Vigenère) or Enigma |
 | In between | Polygraphic (Playfair, Hill) or a short-key Vigenère |
 """
 
@@ -184,7 +184,7 @@ class FrequencyPage(QWidget):
         elif ioc > 0.058:
             verdict = "Uneven like English but relabelled → probably <b>monoalphabetic substitution</b>."
         elif ioc < 0.047:
-            verdict = "Flat distribution → probably <b>polyalphabetic</b> (Vigenère) or a one-time pad."
+            verdict = "Flat distribution → probably <b>polyalphabetic</b> (Vigenère) or a rotor machine."
         else:
             verdict = "In between → maybe polygraphic (Playfair/Hill) or a short-key Vigenère."
         rows = [("Letters", f"{n}"), ("Index of coincidence", f"{ioc:.4f}"), ("Chi² vs English", f"{chi:.1f}"),

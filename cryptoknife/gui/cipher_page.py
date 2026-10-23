@@ -7,7 +7,7 @@ import traceback
 from PySide6.QtCore import QEvent, QObject, QRectF, QSettings, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QBoxLayout, QCheckBox, QComboBox, QGridLayout, QHBoxLayout, QHeaderView,
-                               QLabel, QLineEdit, QProgressBar, QPushButton, QScrollArea, QSlider, QSplitter,
+                               QLabel, QProgressBar, QPushButton, QScrollArea, QSlider, QSplitter,
                                QTableWidget, QTableWidgetItem, QTextBrowser, QVBoxLayout, QWidget)
 
 from ..core.analysis import ENGLISH_FREQ, ENGLISH_ORDER, counts
@@ -20,7 +20,7 @@ from .loading import LoadingOverlay
 from .step_player import StepPlayer
 from .theme import theme
 from .widgets import (Card, ChartView, FlowLayout, HelpButton, MonoText, ParamForm, Responsive, SegmentedTabs,
-                      WrapCheckBox, label, mono_font, params_help, status_label, vscroll)
+                      StartLineEdit, WrapCheckBox, label, mono_font, params_help, status_label, vscroll)
 
 LEGEND = [
     ("active", "Being processed right now (the input letter, key cell or block)"),
@@ -59,7 +59,7 @@ def visualization_help() -> str:
         "<b>row K</b>, <b>swap columns</b>).</p><ul>"
         f"<li><b style='color:{theme().ui['accent']}'>Blue</b> — a value moving to its next stage</li>"
         "<li><b style='color:#f5b84b'>Amber</b> — the key acting (shift, tableau row, matrix entry)</li>"
-        f"<li><b style='color:{theme().ui['button']}'>Green</b> — the result being written</li>"
+        f"<li><b style='color:{theme().ui['result']}'>Green</b> — the result being written</li>"
         "<li><b>Dashed grey</b> — a lookup</li></ul>"
         "<h3>Colour legend</h3><table cellspacing='6'>" + "".join(rows) + "</table>"
         "<p>The text above the diagram explains the arithmetic of the current step.</p>"
@@ -212,12 +212,13 @@ class VisualizeTab(QWidget):
         # Key card
         keep_text = ("Keep spaces, punctuation and letter case" if cipher.preserves_layout
                      else "Keep spaces and punctuation")
-        key = Card("Key", f"{cipher.name} — key settings",
-                   params_help(cipher.params) + f"\n\n**{keep_text}** — spaces and punctuation stay where they were "
-                   "in the input. " + ("Each letter also keeps its upper/lower case." if cipher.preserves_layout else
-                   "Letter case is not kept because this cipher moves letters: ciphertext is UPPERCASE, plaintext "
-                   "lowercase; padding letters are added after the last letter.") + " Turn it off to get letters "
-                   "only.")
+        key = Card("Key", f"{cipher.name} — the key",
+                   (cipher.key_help.strip() + "\n\n" if cipher.key_help else "")
+                   + "## Fields\n" + params_help(cipher.params)
+                   + f"\n\n**{keep_text}:** spaces and punctuation stay in place"
+                   + (", and letters keep their case." if cipher.preserves_layout else
+                      "; letters use the default case (ciphertext UPPERCASE, plaintext lowercase).")
+                   + " Turn it off to get letters only.")
         self.form = ParamForm(cipher.params, lambda: max(1, len(clean(self.input.toPlainText()))))
         key.add(self.form)
         self.keep = WrapCheckBox(keep_text)
@@ -233,10 +234,10 @@ class VisualizeTab(QWidget):
         btn_box = QWidget()
         act_lay.addWidget(btn_box)
         actions = FlowLayout(btn_box, spacing=10)
-        self.enc_btn = QPushButton("🔒  Encrypt")
-        self.dec_btn = QPushButton("🔓  Decrypt")
+        self.enc_btn = QPushButton("Encrypt")
+        self.dec_btn = QPushButton("Decrypt")
         for b, mode, sc in ((self.enc_btn, "encrypt", "Ctrl+E"), (self.dec_btn, "decrypt", "Ctrl+D")):
-            b.setObjectName("big")
+            b.setObjectName("big" if mode == "encrypt" else "decrypt")  # blue / violet, so the two stand apart
             b.setCursor(Qt.PointingHandCursor)
             b.setToolTip(f"{mode.capitalize()} ({sc})")
             b.setShortcut(sc)
@@ -779,7 +780,10 @@ class CrackTab(QWidget):
         if cipher.manual_solver == "substitution":
             self.solver = SubstitutionSolver()
             self.solver.useKey.connect(lambda key: self.useKey.emit({"key": key}, self.input.toPlainText()))
-            self.input.textChanged.connect(lambda: self.solver.set_ciphertext(self.input.toPlainText()))
+            # recompute once typing pauses: long ciphertexts would otherwise redraw the chart on every key
+            self._solver_timer = QTimer(self, singleShot=True, interval=200)
+            self._solver_timer.timeout.connect(lambda: self.solver.set_ciphertext(self.input.toPlainText()))
+            self.input.textChanged.connect(self._solver_timer.start)
             self.side_tabs.addTab(self.solver, "Manual solver")
             details.header.addWidget(HelpButton("Manual solver", SOLVER_HELP))
         details.add(self.side_tabs.stack, 1)
@@ -955,7 +959,7 @@ class SubstitutionSolver(QWidget):
             fl.setStyleSheet("font-size: 7.5pt")
             grid.addWidget(fl, r0 + 1, col)
             self.freq_labels.append(fl)
-            e = QLineEdit()
+            e = StartLineEdit()
             e.setMaxLength(1)
             e.setAlignment(Qt.AlignCenter)
             e.setFixedWidth(30)
@@ -1008,18 +1012,30 @@ class SubstitutionSolver(QWidget):
         used = list(m.values())
         for i, e in enumerate(self.edits):
             v = m.get(ALPHABET[i])
-            dup = v and used.count(v) > 1
-            e.setStyleSheet("padding: 4px 0;" + (f"color: {ui['bad']}; border-color: {ui['bad']};" if dup else ""))
-        out = []
+            sheet = "padding: 4px 0;" + (f"color: {ui['bad']}; border-color: {ui['bad']};"
+                                         if v and used.count(v) > 1 else "")
+            if e.styleSheet() != sheet:  # restyling is slow: only touch boxes whose state changed
+                e.setStyleSheet(sheet)
+        # one <span> per run of same-coloured characters instead of one per letter
+        out, run, run_color = [], [], None
+
+        def flush():
+            if run:
+                text = "".join(run)
+                out.append(f"<span style='color:{run_color}'>{text}</span>" if run_color else text)
+                run.clear()
+
         for ch in self.ct:
             u = ch.upper()
             if ch.isascii() and ch.isalpha():
-                if u in m:
-                    out.append(f"<span style='color:{ui['good']}'>{m[u].lower()}</span>")
-                else:
-                    out.append(f"<span style='color:{ui['muted']}'>{u}</span>")
+                color, piece = (ui["good"], m[u].lower()) if u in m else (ui["muted"], u)
             else:
-                out.append(html.escape(ch).replace("\n", "<br>"))
+                color, piece = None, html.escape(ch).replace("\n", "<br>")
+            if color != run_color:
+                flush()
+                run_color = color
+            run.append(piece)
+        flush()
         self.view.setHtml(f"<div style='font-family:\"{theme().mono_font}\"; font-size:11pt'>{''.join(out)}</div>")
 
     def _emit(self) -> None:

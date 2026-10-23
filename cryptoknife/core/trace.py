@@ -26,7 +26,7 @@ from typing import Sequence
 MAX_VIZ = 120  # letters animated step by step; longer texts are still fully en/decrypted
 
 
-@dataclass
+@dataclass(slots=True)
 class Cell:
     text: str = ""
     style: str = "normal"
@@ -95,7 +95,7 @@ class Arrow:
     carry: str | None = None
     reveal: bool = False
     kind: str = "flow"
-    curve: str = "auto"  # auto | straight
+    curve: str = "auto"  # auto | straight | side (leave and enter horizontally, e.g. wiring between columns)
     static: bool = False  # drawn fully at all times (paths, guides), not animated
 
 
@@ -154,23 +154,25 @@ def stream_grid(rows: list[Row], active: int | None, title: str = "", filler: se
 
     active = None shows everything (overview); -1 shows only given rows.
     """
-    filler = filler or set()
+    filler = filler or ()
     cells = []
     for row in rows:
+        rid, base, given, reveal = row.id, row.style, row.given, row.reveal
+        fills = base in ("input", "result")
         out = []
         for j, v in enumerate(row.values):
-            r = -1 if row.given else (row.reveal[j] if row.reveal is not None else j)
-            style = "filler" if (j in filler and row.style in ("input", "result")) else row.style
+            cid = f"{rid}{j}" if rid else ""
+            style = "filler" if fills and j in filler else base
             if active is None:
-                c = Cell(v, style)
-            elif r == active and not row.given and r >= 0:
-                c = Cell(v, "current")
+                out.append(Cell(v, style, "", cid))
+                continue
+            r = -1 if given else (reveal[j] if reveal is not None else j)
+            if r == active and r >= 0 and not given:
+                out.append(Cell(v, "current", "", cid))
             elif r < active or r == -1:
-                c = Cell(v, "active" if j == active else style)
+                out.append(Cell(v, "active" if j == active else style, "", cid))
             else:
-                c = Cell("", "empty")
-            c.id = f"{row.id}{j}" if row.id else ""
-            out.append(c)
+                out.append(Cell("", "empty", "", cid))
         cells.append(out)
     return Grid(cells, title, [r.label for r in rows], label_min=label_min)
 

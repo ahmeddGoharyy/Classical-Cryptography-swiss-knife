@@ -9,7 +9,7 @@ This document lists every algorithm built into **Classical Cryptography Swiss Kn
 | Letter numbering | A = 0, B = 1, …, Z = 25 |
 | Arithmetic | mod 26 |
 | Default output | Ciphertext in UPPERCASE, plaintext in lowercase, letters only (lecture style) |
-| Keep format option | On by default. Spaces and punctuation stay at their original positions for every cipher. Substitution ciphers (Caesar, Monoalphabetic, Polyalphabetic, Vigenère family) also keep each letter's case; ciphers that move letters or add padding (Digraph, Playfair, Hill, transpositions) use UPPERCASE ciphertext / lowercase plaintext and put padding letters after the last letter. |
+| Keep format option | On by default. Spaces and punctuation stay at their original positions for every cipher. Substitution ciphers (Caesar, Monoalphabetic, Polyalphabetic / Vigenère) also keep each letter's case; ciphers that move letters or add padding (Digraph, Playfair, Hill, transpositions) use UPPERCASE ciphertext / lowercase plaintext and put padding letters after the last letter. |
 | Homophonic keep format | Punctuation that is also one of the key's cipher symbols (e.g. `?`, `-`) is left out of the ciphertext, so it can't be mistaken for a letter. |
 | "English likeness" | A 0–100 % score built from English quadgram (4-letter) statistics. The crackers use it to rank candidates. |
 
@@ -20,15 +20,13 @@ This document lists every algorithm built into **Classical Cryptography Swiss Kn
 | 1 | Caesar | Monoalphabetic substitution | shift k (any integer, e.g. −3; used mod 26) | 25 | Brute force over all 26 shifts |
 | 2 | Monoalphabetic | Monoalphabetic substitution | permutation of the alphabet, or a keyword | 26! ≈ 4 × 10²⁶ | Frequency analysis, then hill climbing, plus a manual solver |
 | 3 | Homophonic | Monoalphabetic substitution | several symbols per letter (`a=D-? b=Q2T …`) | far more than 26! | Simulated annealing with quadgrams + chi² penalty |
-| 4 | Polyalphabetic (several alphabets) | Polyalphabetic substitution | m cipher alphabets used in turn | (26!)ᵐ | Periodic IoC, then simulated annealing per column |
-| 5 | Vigenère (repeating key) | Polyalphabetic substitution | keyword | 26^m | Kasiski + index of coincidence, then a Caesar per column |
-| 6 | Vigenère (autokey) | Polyalphabetic substitution | keyword (followed by the plaintext) | 26^m | Per-column chi² for each keyword length |
-| 7 | One-time pad | Polyalphabetic substitution | random pad ≥ message length | 26^n | Not breakable; shows the pad for any guessed plaintext |
-| 8 | Digraph (higher order) | Polygraphic substitution | 676-pair table: fixed pairs + keyword | 676! | None (needs thousands of letters) |
-| 9 | Playfair | Polygraphic substitution | keyword → 5×5 square | 25! ≈ 1.5 × 10²⁵ | Simulated annealing over key squares |
-| 10 | Hill | Polygraphic substitution | invertible n×n matrix mod 26 | ≈ 26^(n²) | Known-plaintext K = P⁻¹·C, or a ciphertext-only column search (n = 2, 3) |
-| 11 | Columnar transposition | Transposition | column order (numbers or keyword) | L! | Exhaustive search over orders (L ≤ 8), hill climbing beyond |
-| 12 | Rail fence | Transposition | number of rails | n − 1 | Brute force over the rail count |
+| 4 | Polyalphabetic (Vigenère) | Polyalphabetic substitution | keyword + key mode (repeating key or autokey) | 26^m | Kasiski + IoC, then a Caesar per column; autokey: chi² per key letter |
+| 5 | Digraph (higher order) | Polygraphic substitution | 676-pair table: fixed pairs + keyword | 676! | None (needs thousands of letters) |
+| 6 | Playfair | Polygraphic substitution | keyword → 5×5 square | 25! ≈ 1.5 × 10²⁵ | Simulated annealing over key squares |
+| 7 | Hill | Polygraphic substitution | invertible n×n matrix mod 26 | ≈ 26^(n²) | Known-plaintext K = P⁻¹·C, or a ciphertext-only column search (n = 2, 3) |
+| 8 | Columnar transposition | Transposition | column order (numbers or keyword) | L! | Exhaustive search over orders (L ≤ 8), hill climbing beyond |
+| 9 | Rail fence | Transposition | number of rails + pattern (zigzag or columns) | 2(n − 1) | Brute force over the rail count and pattern |
+| 10 | Enigma (I / M3) | Rotor machine | rotors, reflector, rings, start position, plugboard | ≈ 1.6 × 10²⁰ (3 of 5 rotors, 10 cables) | Gillogly IoC attack: rotors and start, rings, then plugboard hill climbing |
 | — | Frequency analysis tool | Analysis | — | — | Letter %, IoC, chi², n-grams, Caesar overlay, periodic IoC |
 
 ---
@@ -88,7 +86,7 @@ cipher: D Q E P R S F T A W X U G O B V H N C M I Z L Y J K
 
 > **Note:** the lecture key was reconstructed from the slides, using the slide examples and the homophone table (a→D, b→Q, c→E). The mapping d→P was inferred because it is the only letter left. If your slide shows a different letter, change it in the app's key box.
 
-**Weakness:** the key space is enormous (26!), but substitution **does not change relative letter frequencies**. The lecture lists three ways to make it stronger, and all three are in the app: **homophones** (section 3), **several alphabets** (section 4, with Vigenère as the best-known case) and **higher-order substitution** (section 8).
+**Weakness:** the key space is enormous (26!), but substitution **does not change relative letter frequencies**. The lecture lists three ways to make it stronger, and all three are in the app: **homophones** (section 3), **several alphabets** (section 4, Vigenère) and **higher-order substitution** (section 5).
 
 **Visualizer:** the 26-column substitution table with the current letter highlighted. Keyword letters are marked, and the P.T/C.T rows fill in step by step.
 
@@ -142,44 +140,13 @@ r=N/ s=C9* t=M34 u=I v=Z w=L x=Y y=J z=K
 
 ---
 
-## 4. Polyalphabetic substitution (several alphabets)
+## 4. Polyalphabetic substitution (Vigenère)
 
-**Idea:** use **several cipher alphabets in turn**. Letter 1 of the message uses alphabet 1, letter 2 uses alphabet 2, and so on, wrapping around. The same plain letter turns into different cipher letters. This is the general form of Vigenère, where every alphabet is a shifted alphabet.
+**Idea:** each letter is shifted by its own key letter using the **Vigenère tableau** (row = key letter, column = plain letter, cell = cipher letter), so the same plain letter becomes different cipher letters. The **Key mode** setting chooses how the key stream is built: a **repeating key** or an **autokey**. Both are on the same page in the app.
 
-**Key input:** cipher alphabets separated by spaces. Each one is a 26-letter permutation or a keyword (like the Monoalphabetic key).
+### Repeating key
 
-**Lecture alphabets** (the app's default key is `DQEPRSFTAWXUGOBVHNCMIZLYJK OLV`):
-
-| plain | alphabet 1 | alphabet 2 |
-|---|---|---|
-| a | D | O |
-| b | Q | L |
-| c | E | V |
-
-**Encrypt:** `Cᵢ = alphabet[i mod m][Pᵢ]`
-**Decrypt:** find `Cᵢ` in alphabet `i mod m` and take the plain letter above it.
-
-| Plaintext | Ciphertext | Source |
-|---|---|---|
-| aa bb cc | DOQLEV | Lecture 1 table |
-| meet me at the usual place | GBRSGBDSMERTCTDIVIDVR | default key |
-
-**Key space:** (26!)ᵐ for m alphabets.
-
-**Visualizer:** the m alphabets as stacked substitution tables, plus an "Alphabet" row under the plaintext (1, 2, 1, 2, …). Each step points at the alphabet in use, then at the plain → cipher column. The last step points out a letter that was encrypted two different ways.
-
-**Cracking**
-1. **Index of coincidence** of every m-th letter. With the right m, each column uses one alphabet and has English IoC (≈ 0.067). Multiples of m score high too, so the shortest few good lengths are tried.
-2. **Per-column frequency analysis** gives a first key. Then **simulated annealing** swaps two letters in one column's alphabet, scored with English quadgrams over the whole text, followed by a greedy pass. The search stops when two runs agree.
-3. More alphabets can always fit the text a little better, so **fewer alphabets win** when the fit is about as good.
-
-Works on about 150+ letters per alphabet.
-
----
-
-## 5. Vigenère cipher (repeating key)
-
-**Idea:** a polyalphabetic cipher. The keyword is repeated until it matches the plaintext length, and each letter is shifted by its key letter using the **Vigenère tableau**. Row = key letter, column = plain letter, cell = cipher letter.
+The keyword is repeated until it matches the plaintext length.
 
 **Encrypt:** `Cᵢ = (Pᵢ + K_(i mod m)) mod 26`
 **Decrypt:** `Pᵢ = (Cᵢ − K_(i mod m)) mod 26`
@@ -200,16 +167,16 @@ Stallings: `wearediscoveredsaveyourself` with key `deceptive` gives `ZICVTWQNGRZ
 - Every step shows the **full 26×26 tableau** next to the table. Arrows show the key letter selecting its **row** and the plain letter selecting its **column**, run along both lanes to the crossing cell, and carry the result back to the output.
 - The index arithmetic `(P + K) mod 26` is checked by an arrow as well.
 
-**Cracking**
+**Cracking (repeating key)**
 1. **Kasiski examination.** Repeated sequences of three or more letters are usually the same plaintext encrypted under the same part of the key, so the distances between them are multiples of the key length *m*. The app lists the repeats, their distances, and how often each factor appears.
 2. **Index of coincidence.** For each candidate *m*, split the ciphertext into *m* columns and average their IoC. The right *m* gives about 0.066 (English); wrong values give about 0.038 (random). The app plots this as a chart.
 3. **Column solving.** Each column is a Caesar cipher, so the app picks the shift with the lowest chi² against English. The resulting candidate keys are ranked by English likeness.
 
----
+The Crack tab's **Key mode** is "Try both" by default: it runs the repeating-key and the autokey attacks and ranks all their candidates together, so you don't need to know which mode was used.
 
-## 6. Vigenère cipher (autokey)
+### Autokey
 
-**Idea:** the key stream is the **keyword followed by the plaintext itself**, so the key never repeats.
+The key stream is the **keyword followed by the plaintext itself**, so the key never repeats.
 
 **Encrypt:** `K = keyword ‖ plaintext`, then `Cᵢ = (Pᵢ + Kᵢ) mod 26`
 **Decrypt:** `Pᵢ = (Cᵢ − Kᵢ) mod 26`. Each recovered plaintext letter is appended to the key stream, so decryption runs left to right.
@@ -224,29 +191,13 @@ C.T       W  E  U  P  W  G  A
 
 The Section 1 exercise, decrypting `zadgyaeqrn` with key `easy`, gives **validation**.
 
-**Visualizer:** the same table and tableau as Vigenère. During decryption the K-stream row starts with only the keyword. Each plaintext letter appears in the key row *m* steps later, so you can watch the feedback.
+**Visualizer:** the same table and tableau as the repeating key. During decryption the K-stream row starts with only the keyword. Each plaintext letter appears in the key row *m* steps later, so you can watch the feedback.
 
-**Cracking:** guess the keyword length *m*. Positions j, j+m, j+2m, … form a chain that depends only on key letter *j*: P[j] = C[j] − k, then P[j+m] = C[j+m] − P[j], and so on. Each key letter can therefore be chosen on its own by testing all 26 values and keeping the one whose chain looks most like English (chi²). The app does this for every *m* up to the limit and ranks the results.
-
----
-
-## 7. One-time pad
-
-**Idea:** Vigenère with a **truly random key that is as long as the message** and is **never reused**. The key stream is the pad itself.
-
-**Encrypt / Decrypt:** the same as Vigenère, with `Kᵢ = padᵢ`.
-
-**Example (Section 1):** pad `hilmotry`, plaintext `Computer` → **JWXBIMVP**.
-
-**Security:** unconditionally secure. Every plaintext of the same length is equally likely, so the ciphertext reveals nothing. Its practical problems are **key generation** and **key distribution**.
-
-**Visualizer:** the table and tableau, with the pad as the K-stream. The 🎲 button generates a random pad of the right length.
-
-**"Crack" tab:** explains why analysis fails (the IoC is at random level). If you type a guessed plaintext, it computes the pad `pad = C − guess (mod 26)` that would produce it. This shows that a valid key exists for *any* guess.
+**Cracking (autokey):** guess the keyword length *m*. Positions j, j+m, j+2m, … form a chain that depends only on key letter *j*: P[j] = C[j] − k, then P[j+m] = C[j+m] − P[j], and so on. Each key letter can therefore be chosen on its own by testing all 26 values and keeping the one whose chain looks most like English (chi²). The app does this for every *m* up to the limit and ranks the results.
 
 ---
 
-## 8. Digraph substitution (higher order)
+## 5. Digraph substitution (higher order)
 
 **Idea:** **higher-order substitution** replaces **blocks** of letters instead of single letters, which makes it a simple **block cipher**. With blocks of two letters (digrams), the key is a table of all 26 × 26 = 676 pairs.
 
@@ -282,7 +233,7 @@ The table is a permutation of the 676 pairs, so decryption is unique.
 
 ---
 
-## 9. Playfair cipher
+## 6. Playfair cipher
 
 **Idea:** encrypt **pairs of letters** (digrams) using a 5×5 key square.
 
@@ -328,7 +279,7 @@ U V W X Z
 
 ---
 
-## 10. Hill cipher
+## 7. Hill cipher
 
 **Idea:** split the text into blocks of *n* letters and multiply each block by an invertible n×n key matrix **K** mod 26.
 
@@ -369,7 +320,7 @@ U V W X Z
 
 ---
 
-## 11. Columnar transposition
+## 8. Columnar transposition
 
 **Idea:** letters are rearranged, not replaced. Write the plaintext row by row under the key, then read the **columns** top to bottom in key order.
 
@@ -399,9 +350,9 @@ U V W X Z
 
 ---
 
-## 12. Rail fence cipher
+## 9. Rail fence cipher
 
-**Idea:** write the plaintext in a **zigzag** over *k* rails, then read rail by rail.
+**Idea:** write the plaintext over *k* rails (the depth), then read rail by rail. The **Pattern** setting chooses how it is written: a **zigzag** (Stallings) or **column by column** (lecture).
 
 **Example:** depth 2, `meet me after the toga party`
 
@@ -413,17 +364,74 @@ m . e . m . a . t . r . h . t . g . p . r . y
 Reading rail 1 then rail 2 gives **MEMATRHTGPRYETEFETEOAAT** (Stallings).
 With 3 rails, `we are discovered flee at once` gives `WECRLTEERDSOEEFEAOCAIVDEN`.
 
+**Column variant (lecture):** write the plaintext straight down columns of *k* rows, then read row by row. `Computer Science`, depth 2:
+
+```
+c m u e s i n e
+o p t r c e c
+```
+
+→ **CMUESINEOPTRCEC**. With depth 3 the columns are c-o-m, p-u-t, e-r-s, c-i-e, n-c-e → **CPECNOURICMTSEE**. Letter *i* is on rail *i* mod *k*, so this is the same as reading every *k*-th letter.
+
 **Decrypt:**
-1. Draw the zigzag pattern for the message length.
+1. Draw the pattern for the message length: the zigzag, or ⌈length ÷ depth⌉ columns (15 ÷ 2 = 7.5 → 8; the last column may be short).
 2. Count the letters on each rail.
 3. Fill each rail with that many ciphertext letters, in order.
-4. Read along the zigzag.
+4. Read the letters back in writing order (along the zigzag, or down the columns).
 
-**Visualizer:** the rail grid with a **zigzag guide line** connecting the letters in order.
+**Visualizer:** the rail grid (one column per letter for the zigzag, ⌈n ÷ k⌉ columns for the column variant) with a **guide line** connecting the letters in writing order.
 - **Encryption:** letters drop straight down onto their rail one at a time, then each rail streams into the ciphertext.
 - **Decryption:** the zigzag is marked with `?`, each rail is filled with its share of the ciphertext, and the plaintext is read back along the zigzag.
 
-**Cracking:** brute force. The only key is the number of rails (2 to n−1), so the app ranks every option by English likeness.
+**Cracking:** brute force. The key is just the number of rails (2 to n−1) and the pattern, so the app tries every rail count for both patterns and ranks them by English likeness.
+
+---
+
+## 10. Enigma machine (I / M3)
+
+The app's menu has a separate **Rotor machines** section for it.
+
+**Idea:** an electro-mechanical cipher machine used by Germany in WWII. Every key press first **turns the rotors**, then current flows through the plugboard, three rotors and the reflector, back through the rotors and the plugboard to a lamp. The rotors move with every letter, so each letter is encrypted with a different substitution alphabet: a polyalphabetic cipher with a period of 16,900 (26 × 25 × 26, because of the double step).
+
+**Parts**
+
+| Part | In the app | Notes |
+|---|---|---|
+| Plugboard (Steckerbrett) | `AV BS CG …` | swaps letter pairs on the way in and out; usually 10 cables |
+| Rotors | three of I–VIII, left to right | I–V Enigma I; VI–VIII navy M3 (two turnover notches) |
+| Ring settings (Ringstellung) | `AAA` or `01 01 01` | turns each rotor's wiring against its letter ring |
+| Start position (Grundstellung) | `AAA` | window letters before the first key press |
+| Reflector (UKW) | A, B or C | B was standard |
+
+**Rotor stepping (before each key press)**
+1. The right rotor always turns.
+2. If the right rotor showed its **turnover letter** (I: Q, II: E, III: V, IV: J, V: Z, VI–VIII: Z and M), the middle rotor turns.
+3. If the middle rotor showed its turnover letter, the middle **and** the left rotor turn. This is the **double step**: with rotors I II III, `ADU → ADV → AEW → BFX`.
+
+**Signal path:** `C = P⁻¹ · R⁻¹ · M⁻¹ · L⁻¹ · U · L · M · R · P (key)`, where each rotor's wiring is shifted by (window − ring).
+
+**Properties**
+- **Reciprocal:** encryption and decryption are the same operation with the same start position.
+- **No letter ever encrypts to itself**, because the reflector has no fixed points. Bletchley Park used this to place *cribs* (guessed plaintext).
+
+**Examples**
+
+| Input | Settings | Output | Source |
+|---|---|---|---|
+| AAAAA | I II III, B, rings AAA, start AAA | BDZGO | standard test vector |
+| EDPUD NRGYS … (Operation Barbarossa, 7 July 1941) | II IV V, B, rings 02 21 12, start BLA, plugs AV BS CG DL FU HZ IN KM OW RX | AUFKL X ABTEILUNG X VON X KURTINOWA … | historical message |
+
+**Visualizer:** every key press is shown in three short steps.
+1. **Rotors turn:** a Before / After table of the three rotor windows, with `+1` arrows on the rotors that move. The text explains why: the right rotor always turns, a turnover letter pushes the next rotor, and the double step. A "Windows" row under the text records the positions used for every letter.
+2. **The current goes in:** a "Path of the current" table with one column per part (Keyboard, Plugboard, Right, Middle, Left rotor, Reflector). The top row fills in from left to right as the signal reaches each part, and the text gives each substitution (e.g. "Right rotor III (window B): A → C").
+3. **Back to the lamp:** the reflector sends the current to the bottom row, which fills in from right to left (left, middle, right rotor, plugboard) until the lamp lights. The output letter appears in the C.T row.
+
+**Cracking (Gillogly's ciphertext-only attack)**
+1. **Rotor order and start position.** Ignore the plugboard and decrypt with every rotor order (60 for rotors I–V) and every start position (17,576), vectorized with NumPy. The right setting makes the text partly English, so it scores a higher **index of coincidence**. The best few starts per order are kept.
+2. **Ring settings.** For each candidate, change the right ring together with the right start letter. That keeps the wiring offset but moves the point where the middle rotor turns; keep the best IoC. Then do the same for the middle rotor. The left ring only relabels the start letter.
+3. **Plugboard.** Hill climbing: connect or disconnect every pair of letters and keep changes that raise the IoC, then English quadgrams. The rings are then checked again with the plugboard in place.
+
+The candidates are refined until the time limit or until the text reads as English. The attack is statistical, so it needs long messages. In the app's tests, about 475 letters with up to 6 cables was usually broken in 2–15 s (2 of 3 random keys). With the historical 10 cables, even 745 letters was not enough; that needs well over 1,000 letters, which is why Bletchley Park relied on cribs and the bombe. Equivalent settings exist (a ring and its start letter shifted together, the left ring), so the key found may differ from the one used while decrypting the same text.
 
 ---
 
@@ -449,8 +457,9 @@ A standalone page (Tools → Frequency analysis) for any text:
 | IoC ≈ 0.066 and letter frequencies match English | Transposition |
 | IoC ≈ 0.066 but the frequency shape is relabelled | Monoalphabetic substitution (Caesar, keyword…) |
 | More than 26 different symbols (digits, punctuation) with flat frequencies | Homophonic substitution |
-| IoC well below 0.06 (flat distribution) | Polyalphabetic (several alphabets, Vigenère) or a one-time pad |
+| IoC well below 0.06 (flat distribution) | Polyalphabetic (Vigenère) |
 | In between | Polygraphic (Digraph / Playfair / Hill) or a Vigenère with a short key |
+| IoC at random level, no letter ever encrypted to itself in a long text | Enigma |
 
 ---
 

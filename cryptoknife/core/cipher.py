@@ -21,6 +21,7 @@ FAMILIES = [
     "Polyalphabetic substitution",
     "Polygraphic substitution",
     "Transposition",
+    "Rotor machine",
 ]
 
 
@@ -83,6 +84,7 @@ class Cipher:
     summary = ""          # one line
     description = ""      # short HTML summary
     help = ""             # Markdown shown in the "?" help window
+    key_help = ""         # Markdown for the key card's "?": key shape, key space and weaknesses, in short
     params: list[Param] = []
     crack_params: list[Param] = []
     preserves_layout = True   # output letter i depends only on input letter i (letter case can be kept too)

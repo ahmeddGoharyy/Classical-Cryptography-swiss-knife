@@ -3,9 +3,6 @@ from __future__ import annotations
 
 from typing import Callable
 
-import matplotlib
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-from matplotlib.figure import Figure
 from PySide6.QtCore import QEvent, QLocale, QObject, QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (QBoxLayout, QButtonGroup, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
@@ -13,7 +10,6 @@ from PySide6.QtWidgets import (QBoxLayout, QButtonGroup, QCheckBox, QComboBox, Q
                                QStackedWidget, QTextBrowser, QToolButton, QVBoxLayout, QWidget)
 
 from ..core.cipher import Param
-from ..core.trace import Chart
 from .theme import theme
 
 
@@ -261,7 +257,7 @@ class ParamForm(QWidget):
             w.setChecked(bool(p.default))
             w.toggled.connect(self.changed)
         else:
-            w = QLineEdit(str(p.default))
+            w = StartLineEdit(str(p.default))
             w.setFont(mono_font(10.5))
             if p.help:
                 w.setPlaceholderText(p.help)
@@ -311,60 +307,30 @@ def params_help(params: list[Param]) -> str:
     return "\n".join(lines)
 
 
-class ChartView(FigureCanvasQTAgg):
-    """A themed matplotlib bar chart for core.trace.Chart specs."""
+def ChartView(parent=None, height: float = 2.6):  # noqa: N802 — used like a class
+    """A themed bar chart (see charts.py). matplotlib is imported on first use, keeping startup fast."""
+    from .charts import ChartView as _ChartView
+    return _ChartView(parent, height)
 
-    def __init__(self, parent=None, height: float = 2.6):
-        self.fig = Figure(figsize=(6, height), layout="constrained")
-        super().__init__(self.fig)
-        self.setParent(parent)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.setMinimumHeight(int(height * 55))
-        self._chart: Chart | None = None
-        theme().changed.connect(self._retheme)  # bound method: auto-disconnected when the chart is deleted
 
-    def _retheme(self) -> None:
-        self.show_chart(self._chart)
+class StartLineEdit(QLineEdit):
+    """A one-line field that shows the start of a long text whenever it is not being edited.
 
-    def show_chart(self, chart: Chart | None) -> None:
-        self._chart = chart
-        ui = theme().ui
-        matplotlib.rcParams["font.family"] = [theme().ui_font, "DejaVu Sans"]
-        self.fig.clear()
-        self.fig.set_facecolor(ui["card"])
-        if chart is None:
-            self.draw_idle()
-            return
-        ax = self.fig.add_subplot(111)
-        ax.set_facecolor(ui["card"])
-        names = list(chart.series)
-        k = len(names)
-        width = 0.8 / max(1, k)
-        xs = range(len(chart.labels))
-        for s, name in enumerate(names):
-            vals = chart.series[name]
-            color = ui["series"][s % len(ui["series"])]
-            bars = ax.bar([x - 0.4 + width * (s + 0.5) for x in xs], vals, width * 0.92, label=name, color=color,
-                          alpha=1.0 if s == 0 else 0.8, zorder=3)
-            for h in chart.highlight:
-                if 0 <= h < len(bars) and s == 0:
-                    bars[h].set_color(ui["button"])
-        for i, (name, v) in enumerate(chart.refs.items()):
-            ax.axhline(v, ls="--", lw=1.2, color=ui["series"][(i + 1) % 4], label=f"{name} ({v:.3f})", zorder=4)
-        ax.set_xticks(list(xs))
-        ax.set_xticklabels(chart.labels, fontsize=8 if len(chart.labels) > 26 else 9,
-                           rotation=90 if max((len(lb) for lb in chart.labels), default=0) > 3 else 0)
-        ax.set_title(chart.title, color=ui["text"], fontsize=10.5, loc="left")
-        ax.set_ylabel(chart.ylabel, color=ui["muted"])
-        ax.tick_params(colors=ui["muted"], length=0)
-        ax.grid(axis="y", color=ui["border"], lw=0.8, zorder=0)
-        for sp in ax.spines.values():
-            sp.set_visible(False)
-        if k > 1 or chart.refs:
-            leg = ax.legend(fontsize=8.5, frameon=False)
-            for t in leg.get_texts():
-                t.set_color(ui["text"])
-        self.draw_idle()
+    Qt leaves the cursor (and so the view) at the end after setText, hiding the beginning of long keys.
+    """
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(text, parent)
+        self.setCursorPosition(0)
+
+    def setText(self, text: str) -> None:  # noqa: N802 — Qt API name
+        super().setText(text)
+        if not self.hasFocus():
+            self.setCursorPosition(0)
+
+    def focusOutEvent(self, ev) -> None:  # noqa: N802
+        super().focusOutEvent(ev)
+        self.setCursorPosition(0)
 
 
 class MonoText(QPlainTextEdit):

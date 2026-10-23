@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QPoint, QSize, Qt, Signal
-from PySide6.QtWidgets import (QFrame, QLabel, QLineEdit, QListWidget, QListWidgetItem, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QFrame, QLabel, QListWidget, QListWidgetItem, QVBoxLayout, QWidget)
 
 from ..core.cipher import all_ciphers
-from .theme import theme
+from .widgets import StartLineEdit
 
 
 def entries() -> list[tuple[str, str, str]]:
@@ -42,7 +42,7 @@ class CommandPalette(QFrame):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(10, 10, 10, 10)
         lay.setSpacing(8)
-        self.search = QLineEdit()
+        self.search = StartLineEdit()
         self.search.setPlaceholderText("Search ciphers and tools…")
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(self._filter)

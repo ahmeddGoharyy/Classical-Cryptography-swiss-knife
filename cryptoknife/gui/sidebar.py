@@ -4,18 +4,20 @@ from __future__ import annotations
 import re
 
 from PySide6.QtCore import QSettings, Qt, Signal
-from PySide6.QtWidgets import (QButtonGroup, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea,
-                               QSizePolicy, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea,
+                               QVBoxLayout, QWidget)
 
 from ..core.cipher import all_ciphers
 from .logo import logo_pixmap
 from .nav_icons import ICONS, icon_pixmap
 from .theme import theme
+from .widgets import StartLineEdit
 
 AUTHOR = "Ahmed El Gohary"
 
 # Menu categories: (title, icon glyph, colour, one-line description)
 CLASSICAL = ("Classical ciphers", "classical", "#4f8cff", "Pen-and-paper ciphers")
+ROTOR = ("Rotor machines", "rotor", "#f472b6", "WWII cipher machines")
 MODERN = [("Modern symmetric", "symmetric", "#2dd4bf", "One shared secret key"),
           ("Modern asymmetric", "asymmetric", "#a78bfa", "Public / private key pair")]
 TOOLS = ("Tools", "tools", "#22c55e", "Text statistics")
@@ -25,16 +27,33 @@ FAMILY_COLORS = {
     "Polyalphabetic substitution": "#a78bfa",
     "Polygraphic substitution": "#f5b84b",
     "Transposition": "#2dd4bf",
+    "Rotor machine": "#f472b6",
 }
+# cipher families with their own menu category (all other ciphers are classical)
+FAMILY_GROUP = {"Rotor machine": ROTOR[0]}
+# sub-headings inside the classical group: every family substitutes letters except transposition
+CLASSICAL_SECTIONS = ["Substitution", "Transposition"]
+FAMILY_SECTION = {"Transposition": "Transposition"}
+# menu-only order tweaks: cipher id -> the id it is listed just before
+MENU_BEFORE = {"digraph": "vigenere"}
+
+
+def menu_order(ciphers: list) -> list:
+    out = list(ciphers)
+    for cid, before in MENU_BEFORE.items():
+        ids = [c.id for c in out]
+        if cid in ids and before in ids:
+            c = out.pop(ids.index(cid))
+            out.insert([x.id for x in out].index(before), c)
+    return out
 # id -> (title, subtitle) shown in the menu
 DISPLAY = {"caesar": ("Caesar", "shift cipher"), "monoalphabetic": ("Monoalphabetic", "substitution table"),
            "homophonic": ("Homophonic", "several symbols per letter"),
-           "polyalphabetic": ("Polyalphabetic", "several alphabets in turn"),
            "digraph": ("Digraph", "higher-order pair table"),
-           "vigenere": ("Vigenère", "repeating key"), "autokey": ("Autokey", "Vigenère variant"),
-           "otp": ("One-time pad", "perfect secrecy"), "playfair": ("Playfair", "5×5 key square"),
+           "vigenere": ("Polyalphabetic", "Vigenère cipher"),
+           "enigma": ("Enigma", "I / M3 rotor machine"), "playfair": ("Playfair", "5×5 key square"),
            "hill": ("Hill", "matrix cipher"), "columnar": ("Columnar", "transposition table"),
-           "railfence": ("Rail fence", "zigzag"), "freq": ("Frequency analysis", "letter statistics")}
+           "railfence": ("Rail fence", "zigzag or columns"), "freq": ("Frequency analysis", "letter statistics")}
 
 
 def rgba(hex_color: str, alpha: float) -> str:
@@ -82,8 +101,62 @@ class NavItem(QPushButton):
         lay.addLayout(texts, 1)
 
 
+class Section(QWidget):
+    """A collapsible sub-heading inside a group, e.g. Substitution / Transposition."""
+
+    def __init__(self, key: str, title: str, items: list[NavItem]):
+        super().__init__()
+        self.key, self.items = key, items
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(2)
+        self.header = QPushButton()
+        self.header.setObjectName("sectionHeader")
+        self.header.setCursor(Qt.PointingHandCursor)
+        self.header.setCheckable(True)
+        self.header.setChecked(QSettings().value(f"nav/open/{key}", True, type=bool))
+        h = QHBoxLayout(self.header)
+        h.setContentsMargins(10, 3, 10, 3)
+        h.setSpacing(6)
+        for text, name in ((title.upper(), "sectionTitle"), (str(len(items)), "navSub")):
+            lbl = QLabel(text)
+            lbl.setObjectName(name)
+            lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            h.addWidget(lbl)
+        h.addStretch(1)
+        self.chev = QLabel()
+        self.chev.setObjectName("navSub")
+        self.chev.setAttribute(Qt.WA_TransparentForMouseEvents)
+        h.addWidget(self.chev)
+        lay.addWidget(self.header)
+        self.body = QWidget()
+        bl = QVBoxLayout(self.body)
+        bl.setContentsMargins(0, 0, 0, 2)
+        bl.setSpacing(2)
+        for it in items:
+            bl.addWidget(it)
+        lay.addWidget(self.body)
+        self.header.toggled.connect(self._toggle)
+        self._toggle(self.header.isChecked())
+
+    def _toggle(self, open_: bool) -> None:
+        QSettings().setValue(f"nav/open/{self.key}", open_)
+        self.body.setVisible(open_)
+        self.chev.setText("▾" if open_ else "▸")
+
+    def filter(self, searching: bool) -> None:
+        """Show the section only if one of its items matches; open it while a search is active."""
+        self.setVisible(any(not it.isHidden() for it in self.items))
+        if searching:
+            self.body.setVisible(True)
+            self.chev.setText("▾")
+        else:
+            self._toggle(self.header.isChecked())
+
+
 class Group(QWidget):
-    def __init__(self, title: str, icon: str, color: str, desc: str, items: list[NavItem]):
+    def __init__(self, title: str, icon: str, color: str, desc: str, items: list[NavItem],
+                 sections: list[tuple[str, list[NavItem]]] | None = None):
         super().__init__()
         self.items = items
         self.title = title
@@ -132,8 +205,12 @@ class Group(QWidget):
         bl = QVBoxLayout(self.body)
         bl.setContentsMargins(14, 2, 0, 6)
         bl.setSpacing(2)
-        for it in items:
-            bl.addWidget(it)
+        self.sections = [Section(f"{title}/{name}", name, its) for name, its in sections or [] if its]
+        for sec in self.sections:
+            bl.addWidget(sec)
+        if not self.sections:
+            for it in items:
+                bl.addWidget(it)
         if not items:
             soon = QLabel("Coming soon")
             soon.setObjectName("navSub")
@@ -154,6 +231,8 @@ class Group(QWidget):
             ok = all(w in it.search_text for w in words)
             it.setVisible(ok)
             visible += ok
+        for sec in self.sections:
+            sec.filter(bool(words))
         self.setVisible(visible > 0 or not words)
         if words:
             self.body.setVisible(True)
@@ -194,7 +273,7 @@ class Sidebar(QFrame):
         brand.addLayout(names, 1)
         lay.addLayout(brand)
 
-        self.search = QLineEdit()
+        self.search = StartLineEdit()
         self.search.setObjectName("navSearch")
         self.search.setPlaceholderText("🔍  Search ciphers…   Ctrl+K")
         self.search.setClearButtonEnabled(True)
@@ -210,14 +289,19 @@ class Sidebar(QFrame):
         self.home = self._item("home", "Home", "about the app", "home", "#9aa0a8")
         self.nav_lay.addWidget(self.home)
         self.groups: list[Group] = []
-        title, icon, color, desc = CLASSICAL
-        items = []
-        for c in all_ciphers():
+        items: dict[str, list[NavItem]] = {}
+        sections: dict[str, list[NavItem]] = {name: [] for name in CLASSICAL_SECTIONS}
+        for c in menu_order(all_ciphers()):
             t, sub = DISPLAY.get(c.id) or split_name(c.name)
-            badge = FAMILY_COLORS.get(c.family, color)
-            items.append(self._item(f"cipher:{c.id}", t, sub, c.id if c.id in ICONS else "classical", badge, c.summary))
-        for title, icon, color, desc in [CLASSICAL, *MODERN]:
-            g = Group(title, icon, color, desc, items if title == CLASSICAL[0] else [])
+            badge = FAMILY_COLORS.get(c.family, CLASSICAL[2])
+            it = self._item(f"cipher:{c.id}", t, sub, c.id if c.id in ICONS else "classical", badge, c.summary)
+            group = FAMILY_GROUP.get(c.family, CLASSICAL[0])
+            items.setdefault(group, []).append(it)
+            if group == CLASSICAL[0]:
+                sections[FAMILY_SECTION.get(c.family, CLASSICAL_SECTIONS[0])].append(it)
+        for title, icon, color, desc in [CLASSICAL, ROTOR, *MODERN]:
+            g = Group(title, icon, color, desc, items.get(title, []),
+                      list(sections.items()) if title == CLASSICAL[0] else None)
             self.groups.append(g)
             self.nav_lay.addWidget(g)
         t_title, t_icon, t_color, t_desc = TOOLS

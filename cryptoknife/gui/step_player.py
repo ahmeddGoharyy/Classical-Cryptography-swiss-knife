@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QSlider, QToolButt
 
 from .theme import theme
 
-SPEEDS = [("0.5×", 3400), ("1×", 1800), ("2×", 950), ("4×", 480), ("8×", 240)]
+SPEEDS = [("0.25×", 6800), ("0.5×", 3400), ("1×", 1800), ("2×", 950), ("4×", 480)]
 
 
 class StepPlayer(QWidget):
@@ -55,7 +55,7 @@ class StepPlayer(QWidget):
         self.speed = QComboBox()
         for name, _ in SPEEDS:
             self.speed.addItem(name)
-        self.speed.setCurrentIndex(1)
+        self.speed.setCurrentIndex([name for name, _ in SPEEDS].index("1×"))
         self.speed.setToolTip("Animation speed")
         self.speed.currentIndexChanged.connect(lambda _: self.timer.setInterval(SPEEDS[self.speed.currentIndex()][1]))
         lay.addWidget(self.speed)

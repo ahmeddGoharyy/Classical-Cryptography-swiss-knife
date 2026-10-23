@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import random
-import time
 
 import numpy as np
 
@@ -59,6 +58,16 @@ The key is any **permutation** of the alphabet: plain letter *i* is replaced by 
 
 ## Security
 26! ≈ 4 × 10²⁶ keys, but it **does not change letter frequencies**: the most common cipher letter is probably E, then T, A, O… so frequency analysis breaks it.
+"""
+    key_help = """## Key shape
+A **permutation of the 26 letters** (a → 1st key letter, b → 2nd, …), or a **keyword** that starts the cipher alphabet: `ZEBRAS` → `ZEBRASCDFGH…`.
+
+## Key space
+**26! ≈ 4 × 10²⁶**, far too many to brute force. Keyword keys are far fewer, and they leave the end of the alphabet in order (…VWXY).
+
+## Weaknesses
+- A plain letter always becomes the same cipher letter, so **letter, pair and word frequencies survive**.
+- Frequency analysis plus hill climbing breaks about 100+ letters.
 """
     params = [Param("key", "Key", "text", DEFAULT_KEY,
                     help="26-letter cipher alphabet (a→1st letter, b→2nd, …) or a keyword", random=_random_key)]

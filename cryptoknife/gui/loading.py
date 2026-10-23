@@ -86,7 +86,7 @@ class LoadingOverlay(QWidget):
         for k in range(3):
             a = math.radians(self._angle * 1.6 + k * 120)
             pulse = 0.6 + 0.4 * math.sin(self._frame / 8 + k)
-            c = QColor(ui["accent"] if k % 2 == 0 else ui["button"])
+            c = QColor(ui["accent"] if k % 2 == 0 else ui["result"])
             qp.setPen(Qt.NoPen)
             qp.setBrush(c)
             rr = 3.2 * pulse
